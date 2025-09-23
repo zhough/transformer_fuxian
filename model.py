@@ -267,7 +267,7 @@ class Transformer(nn.Module):
         if (pretrained_wte is None) or (pretrained_wpe is None):
             self.word_embedding = nn.Embedding(vocab_size,embed_dim)
             self.position_encoding = PositionEncoding(embed_dim)
-            pirnt('加载预训练模型失败')
+            print('加载预训练模型失败')
         else:
             self.word_embedding = pretrained_wte
             
