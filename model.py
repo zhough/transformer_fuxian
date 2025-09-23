@@ -20,8 +20,8 @@ class PositionEncoding(nn.Module):
         pe = torch.zeros(seq_len,self.embed_dim,device=x.device)
         pe[:,0::2] = torch.sin(pos*div_term)
         pe[:,1::2] = torch.cos(pos*div_term)
-
-        return x + pe.unsqueeze(0)
+        
+        return pe.unsqueeze(0)
     
 class SDPAttention(nn.Module):
     def __init__(self):

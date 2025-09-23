@@ -18,8 +18,8 @@ def init_model(tokenizer, pretrained_model):
         num_encoder_layers=config.num_encoder_layers,
         num_decoder_layers=config.num_decoder_layers,
         vocab_size=tokenizer.vocab_size,
-        pretrained_wte=pretrained_model.wte,  # 预训练词嵌入
-        pretrained_wpe=pretrained_model.wpe,  # 预训练位置编码
+        pretrained_wte=None,  # 预训练词嵌入
+        pretrained_wpe=None,  # 预训练位置编码
         ffn_hidden_dim=config.hidden_dim,
         dropout=config.dropout
     )

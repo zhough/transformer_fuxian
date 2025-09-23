@@ -19,60 +19,61 @@ class Config():
         self.num_encoder_layers = 6
         self.num_decoder_layers = 6
         self.hidden_dim = self.embed_dim *4
+        self.max_len = 512
         self.dropout = 0.1
         self.epochs = 10
         self.batch_size = 32
         self.learning_rate = 5e-5
-        self.pad_token_id = 0  # padding token ID
-        self.eos_token_id = 50256  # 结束符 token ID（GPT2 中默认）
+        self.pad_token_id = None
+        self.eos_token_id = None
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.model_save_path = './output/transformer.pth'
 
 config = Config()
 
-class MyDataset(Dataset):
-    def __init__(self,src_data,tgt_data,tokenizer,max_seq_len=512):
-        self.src_data = src_data
-        self.tgt_data = tgt_data
-        self.tokenizer = tokenizer
-        self.max_seq_len = max_seq_len
-        self.tokenizer.pad_token = self.tokenizer.eos_token
-        self.pad_token_id = self.tokenizer.pad_token_id
+# class MyDataset(Dataset):
+#     def __init__(self,src_data,tgt_data,tokenizer,max_seq_len=512):
+#         self.src_data = src_data
+#         self.tgt_data = tgt_data
+#         self.tokenizer = tokenizer
+#         self.max_seq_len = max_seq_len
+#         self.tokenizer.pad_token = self.tokenizer.eos_token
+#         self.pad_token_id = self.tokenizer.pad_token_id
     
-    def __len__(self):
-        return len(self.src_data)
+#     def __len__(self):
+#         return len(self.src_data)
 
-    def __getitem__(self, idx):
-        src_text = self.src_data[idx]
-        tgt_text = self.tgt_data[idx]
+#     def __getitem__(self, idx):
+#         src_text = self.src_data[idx]
+#         tgt_text = self.tgt_data[idx]
 
-        # 对源序列编码（添加结束符，截断/填充到最大长度）
-        src_encoding = self.tokenizer(
-            src_text,
-            truncation=True,
-            max_length=self.max_seq_len,
-            padding="max_length",
-            return_tensors="pt"
-        )
-        src_ids = src_encoding["input_ids"].squeeze(0)  # [max_seq_len]
+#         # 对源序列编码（添加结束符，截断/填充到最大长度）
+#         src_encoding = self.tokenizer(
+#             src_text,
+#             truncation=True,
+#             max_length=self.max_seq_len,
+#             padding="max_length",
+#             return_tensors="pt"
+#         )
+#         src_ids = src_encoding["input_ids"].squeeze(0)  # [max_seq_len]
 
-        tgt_encoding = self.tokenizer(
-            tgt_text,
-            truncation=True,
-            max_length=self.max_seq_len,
-            padding='max_length',
-            return_tensors='pt'
-        )
-        tgt_ids = tgt_encoding['input_ids'].squeeze(0)
+#         tgt_encoding = self.tokenizer(
+#             tgt_text,
+#             truncation=True,
+#             max_length=self.max_seq_len,
+#             padding='max_length',
+#             return_tensors='pt'
+#         )
+#         tgt_ids = tgt_encoding['input_ids'].squeeze(0)
 
-        tgt_input = tgt_ids[:-1]
-        tgt_labels = tgt_ids[1:]
+#         tgt_input = tgt_ids[:-1]
+#         tgt_labels = tgt_ids[1:]
 
-        return {
-            'src_ids':src_ids,
-            'tgt_input':tgt_input,
-            'tgt_label':tgt_labels
-        }
+#         return {
+#             'src_ids':src_ids,
+#             'tgt_input':tgt_input,
+#             'tgt_label':tgt_labels
+#         }
 
 def init_model(tokenizer, pretrained_model):
     # 初始化 Transformer 模型（复用 GPT2 的词嵌入和位置编码）
@@ -82,8 +83,8 @@ def init_model(tokenizer, pretrained_model):
         num_encoder_layers=config.num_encoder_layers,
         num_decoder_layers=config.num_decoder_layers,
         vocab_size=tokenizer.vocab_size,
-        pretrained_wte=pretrained_model.wte,  # 预训练词嵌入
-        pretrained_wpe=pretrained_model.wpe,  # 预训练位置编码
+        pretrained_wte=None,  # 预训练词嵌入
+        pretrained_wpe=None,  # 预训练位置编码
         ffn_hidden_dim=config.hidden_dim,
         dropout=config.dropout
     )
@@ -214,10 +215,10 @@ def main():
     model_dir = './models/'
     # 加载分词器（负责文本→子词ID）
     tokenizer = BertTokenizer.from_pretrained("bert-base-chinese", cache_dir=pretrained_cache)
-    if tokenizer.eos_token is None:
-        tokenizer.add_special_tokens({'eos_token': '[EOS]'})
-    if tokenizer.bos_token is None:
-        tokenizer.bos_token = tokenizer.cls_token
+    tokenizer.eos_token = '[SEP]'
+    tokenizer.pad_token = tokenizer.pad_token
+    config.pad_token_id = tokenizer.pad_token_id
+    config.eos_token_id = tokenizer.eos_token_id
     # 加载预训练模型（我们只需要它的词嵌入层）
     pretrained_model = GPT2Model.from_pretrained("gpt2",cache_dir=model_dir)    
     #加载翻译数据集
