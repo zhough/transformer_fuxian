@@ -17,6 +17,7 @@ class PositionEncoding(nn.Module):
         seq_len = x.shape[1]
         pos = torch.arange(0,seq_len,device=x.device).unsqueeze(1)
         div_term = torch.exp(-1*math.log(10000)*torch.arange(0,self.embed_dim,2)/self.embed_dim)
+        div_term = div_term.to(x.device)
         pe = torch.zeros(seq_len,self.embed_dim,device=x.device)
         pe[:,0::2] = torch.sin(pos*div_term)
         pe[:,1::2] = torch.cos(pos*div_term)

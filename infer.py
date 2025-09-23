@@ -65,7 +65,7 @@ if __name__ == "__main__":
 
     pretrained_model = GPT2Model.from_pretrained("gpt2",cache_dir=pretrained_cache)
     model = init_model(tokenizer,pretrained_model)
-    model.load_state_dict(torch.load(model_path, map_location=config.device))
+    #model.load_state_dict(torch.load(model_path, map_location=config.device))
     src_text = "我爱自然语言处理"
     result = generate(model,src_text,tokenizer)
     print(tokenizer.tokenize(src_text))  
