@@ -19,7 +19,7 @@ class Config():
         self.num_encoder_layers = 6
         self.num_decoder_layers = 6
         self.hidden_dim = self.embed_dim *4
-        self.max_len = 512
+        self.max_seq_len = 512
         self.dropout = 0.1
         self.epochs = 10
         self.batch_size = 32
@@ -27,7 +27,9 @@ class Config():
         self.pad_token_id = None
         self.eos_token_id = None
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.model_save_path = './output/transformer.pth'
+        self.model_save_path = './output1/transformer.pth'
+        self.dataset_cache = './temp/dataset'
+        self.pretrained_cache = './temp/models'
 
 config = Config()
 
@@ -75,7 +77,7 @@ config = Config()
 #             'tgt_label':tgt_labels
 #         }
 
-def init_model(tokenizer, pretrained_model):
+def init_model(tokenizer, pretrained_model=None):
     # 初始化 Transformer 模型（复用 GPT2 的词嵌入和位置编码）
     model = Transformer(
         embed_dim=config.embed_dim,
@@ -207,27 +209,27 @@ def validate(model,tokenizer, dataloader, criterion, config):
 
 def main():
     swanlab.init(
-        project="transformer-training",
+        project="transformer-training_v2",
         experiment_name="baseline-model",
         config=vars(config)  # 自动记录所有超参数
     )
 
     model_dir = './models/'
     # 加载分词器（负责文本→子词ID）
-    tokenizer = BertTokenizer.from_pretrained("bert-base-chinese", cache_dir=pretrained_cache)
+    tokenizer = BertTokenizer.from_pretrained("bert-base-chinese", cache_dir=config.pretrained_cache)
     tokenizer.eos_token = '[SEP]'
     tokenizer.pad_token = tokenizer.pad_token
     config.pad_token_id = tokenizer.pad_token_id
     config.eos_token_id = tokenizer.eos_token_id
     # 加载预训练模型（我们只需要它的词嵌入层）
-    pretrained_model = GPT2Model.from_pretrained("gpt2",cache_dir=model_dir)    
+    #pretrained_model = GPT2Model.from_pretrained("gpt2",cache_dir=model_dir)    
     #加载翻译数据集
-    train_dataset = load_dataset("wmt19", "zh-en", split="train[:20000]",cache_dir='./dataset')
-    train_dataloader = DataLoader(train_dataset,batch_size=config.batch_size,shuffle=True,num_workers=2)
-    test_dataset = load_dataset("wmt19", "zh-en", split="test[:10000]",cache_dir='./dataset')
-    test_dataloader = DataLoader(test_dataset,batch_size=config.batch_size*8,shuffle=True,num_workers=2)
+    train_dataset = load_dataset("wmt19", "zh-en", split="train[:30000]",cache_dir=config.dataset_cache)
+    train_dataloader = DataLoader(train_dataset,batch_size=config.batch_size,shuffle=True,num_workers=4)
+    test_dataset = load_dataset("wmt19", "zh-en", split="validation[:10000]",cache_dir=config.dataset_cache)
+    test_dataloader = DataLoader(test_dataset,batch_size=config.batch_size*8,shuffle=True,num_workers=4)
     # 初始化模型、损失函数、优化器
-    model, criterion, optimizer, scheduler = init_model(tokenizer, pretrained_model)
+    model, criterion, optimizer, scheduler = init_model(tokenizer)
     # 开始训练
     print(f"开始训练，设备：{config.device}")
     for epoch in range(config.epochs):
