@@ -9,6 +9,7 @@ from model import Transformer
 from utils import create_padding_mask, create_causal_mask, create_cross_attention_mask
 from transformers import GPT2Tokenizer, GPT2Model
 import swanlab
+from transformers import BertTokenizer
 
 swanlab.login(api_key="Nj75sPpgjdzUONcpKxlg6")
 class Config():
@@ -115,13 +116,17 @@ def process_dataset(data,tokenizer):
         src_texts,
         padding=True,
         truncation=True,
+        max_length=config.max_seq_len,
         return_tensors='pt',
+        add_special_tokens=True
     )
     tgt_tokenized = tokenizer(
         tgt_texts,
         padding=True,
         truncation=True,
-        return_tensors="pt"
+        max_length=config.max_seq_len,
+        return_tensors="pt",
+        add_special_tokens=True
     )
     src_ids = src_tokenized.input_ids.to(config.device)
     #src_mask = src_tokenized.attention_mask.to(config.device)
@@ -134,7 +139,7 @@ def process_dataset(data,tokenizer):
         'tgt_label':tgt_label,
     }
 # --------------------------
-# 4. 训练循环batch['translation']
+# 4. 训练循环batch
 # --------------------------
 def train_epoch(model, tokenizer, dataloader, criterion, optimizer, scheduler, config):
     model.train()  # 训练模式（启用 dropout 等）
@@ -208,8 +213,11 @@ def main():
 
     model_dir = './models/'
     # 加载分词器（负责文本→子词ID）
-    tokenizer = GPT2Tokenizer.from_pretrained("gpt2",cache_dir=model_dir)
-    tokenizer.pad_token = tokenizer.eos_token
+    tokenizer = BertTokenizer.from_pretrained("bert-base-chinese", cache_dir=pretrained_cache)
+    if tokenizer.eos_token is None:
+        tokenizer.add_special_tokens({'eos_token': '[EOS]'})
+    if tokenizer.bos_token is None:
+        tokenizer.bos_token = tokenizer.cls_token
     # 加载预训练模型（我们只需要它的词嵌入层）
     pretrained_model = GPT2Model.from_pretrained("gpt2",cache_dir=model_dir)    
     #加载翻译数据集

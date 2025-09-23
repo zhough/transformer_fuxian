@@ -9,6 +9,7 @@ from model import Transformer
 from utils import create_padding_mask, create_causal_mask, create_cross_attention_mask
 from transformers import GPT2Tokenizer, GPT2Model
 import swanlab
+from transformers import BertTokenizer
 
 swanlab.login(api_key="Nj75sPpgjdzUONcpKxlg6")
 class Config():
@@ -155,7 +156,8 @@ def main():
 
     model_dir = './models/'
     # 加载分词器（负责文本→子词ID）
-    tokenizer = GPT2Tokenizer.from_pretrained("gpt2",cache_dir=model_dir)
+    tokenizer = BertTokenizer.from_pretrained("bert-base-chinese", cache_dir=pretrained_cache)
+    tokenizer.pad_token = tokenizer.eos_token
     # 加载预训练模型（我们只需要它的词嵌入层）
     pretrained_model = GPT2Model.from_pretrained("gpt2",cache_dir=model_dir)    
 

@@ -1,6 +1,7 @@
 from model import Transformer
 from train1 import process_dataset,Config
 from transformers import GPT2Tokenizer, GPT2Model
+from transformers import BertTokenizer
 import torch.nn as nn
 import torch
 
@@ -56,13 +57,19 @@ def generate(model,src_text,tokenizer,max_len=10):
 
 
 if __name__ == "__main__":
-    tokenizer = GPT2Tokenizer.from_pretrained("gpt2",cache_dir=pretrained_cache)
-    tokenizer.pad_token = tokenizer.eos_token
+    tokenizer = BertTokenizer.from_pretrained("bert-base-chinese", cache_dir=pretrained_cache)
+    if tokenizer.eos_token is None:
+        tokenizer.add_special_tokens({'eos_token': '[EOS]'})
+    if tokenizer.bos_token is None:
+        tokenizer.bos_token = tokenizer.cls_token
+
     pretrained_model = GPT2Model.from_pretrained("gpt2",cache_dir=pretrained_cache)
     model = init_model(tokenizer,pretrained_model)
-    #model.load_state_dict(torch.load(model_path, map_location=config.device))
+    model.load_state_dict(torch.load(model_path, map_location=config.device))
     src_text = "我爱自然语言处理"
     result = generate(model,src_text,tokenizer)
+    print(tokenizer.tokenize(src_text))  
+    print(tokenizer.convert_tokens_to_ids(tokenizer.tokenize(src_text)))  
     print(f'output:{result}')
 
 
