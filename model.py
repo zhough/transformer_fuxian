@@ -235,7 +235,7 @@ class TransformerDecoder(nn.Module):
     
     def forward(self, x, self_attn_mask=None, cross_attn_mask=None,encoder_output=None):
         for layer in self.layers:
-            x = layer(x, self_attn_mask=None, cross_attn_mask=None,encoder_output=None)
+            x = layer(x, self_attn_mask=self_attn_mask, cross_attn_mask=cross_attn_mask,encoder_output=encoder_output)
         x = self.norm(x)
         return x
 
