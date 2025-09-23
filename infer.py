@@ -44,8 +44,9 @@ def generate(model,src_text,tokenizer,max_len=10):
         tgt_ids = torch.cat([tgt_ids, next_token_id], dim=-1)
 
         # 遇到结束符则停止
-        if next_token_id.item() == tokenizer.eos_token_id:
-            break
+        # if next_token_id.item() == tokenizer.eos_token_id:
+        #     break
+        print(tgt_ids)
     return tokenizer.decode(tgt_ids[0], skip_special_tokens=True)
 
 
@@ -59,7 +60,7 @@ if __name__ == "__main__":
     tokenizer.pad_token = tokenizer.eos_token
     pretrained_model = GPT2Model.from_pretrained("gpt2",cache_dir=pretrained_cache)
     model = init_model(tokenizer,pretrained_model)
-    model.load_state_dict(torch.load(model_path, map_location=config.device))
+    #model.load_state_dict(torch.load(model_path, map_location=config.device))
     src_text = "我爱自然语言处理"
     result = generate(model,src_text,tokenizer)
     print(f'output:{result}')

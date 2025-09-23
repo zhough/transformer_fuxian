@@ -62,29 +62,42 @@ class MultiHeadAttention(nn.Module):
         # q,k,v = qkv.unbind(2) #[batch_size,seq_len,num_heads,head_dim]  
         # q,k,v = q.transpose(1,2),k.transpose(1,2),v.transpose(1,2)  #[batch_size,num_heads,seq_len,head_dim] 
 
-        if encoder_kv is None:
-            q = self.q_proj(x)
-            k = self.k_proj(x)
-            v = self.v_proj(x)
-        else:
+        if encoder_kv is not None:
             q = self.q_proj(x)  #[batch_size,seq_len,embed_dim]
             k = self.k_proj(encoder_kv)
             v = self.v_proj(encoder_kv)
-        #拆分为多头注意力
-        q = q.reshape(batch_size,seq_len,self.num_heads,self.head_dim).transpose(1,2)
-        k = k.reshape(batch_size,seq_len,self.num_heads,self.head_dim).transpose(1,2)
-        v = v.reshape(batch_size,seq_len,self.num_heads,self.head_dim).transpose(1,2)
-        #合并batch_size和num_heads
-        q = q.reshape(-1,seq_len,self.head_dim)
-        k = k.reshape(-1,seq_len,self.head_dim)
-        v = v.reshape(-1,seq_len,self.head_dim)
+            tgt_seq_len = q.shape[1]  # 目标序列长度（q的长度）
+            src_seq_len = k.shape[1]  # 源序列长度（k/v的长度）
+            # 重塑 q（用目标序列长度）
+            q = q.reshape(batch_size, tgt_seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+            # 重塑 k/v（用源序列长度）
+            k = k.reshape(batch_size, src_seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+            v = v.reshape(batch_size, src_seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+            
+            # 合并 batch_size 和 num_heads 时保持各自长度
+            q = q.reshape(-1, tgt_seq_len, self.head_dim)
+            k = k.reshape(-1, src_seq_len, self.head_dim)
+            v = v.reshape(-1, src_seq_len, self.head_dim)
+        else:
+
+            q = self.q_proj(x)
+            k = self.k_proj(x)
+            v = self.v_proj(x)
+            #拆分为多头注意力
+            q = q.reshape(batch_size,seq_len,self.num_heads,self.head_dim).transpose(1,2)
+            k = k.reshape(batch_size,seq_len,self.num_heads,self.head_dim).transpose(1,2)
+            v = v.reshape(batch_size,seq_len,self.num_heads,self.head_dim).transpose(1,2)
+            #合并batch_size和num_heads
+            q = q.reshape(-1,seq_len,self.head_dim)
+            k = k.reshape(-1,seq_len,self.head_dim)
+            v = v.reshape(-1,seq_len,self.head_dim)
 
         #重构建mask
         if mask is not None:    #[B, seq_len_q, seq_len_k]
             if mask.dim() == 3:
                 mask = mask.unsqueeze(1)
-            mask = mask.repeat(1,self.num_heads,1,1).reshape(-1,seq_len,seq_len)
-
+            mask = mask.repeat(1,self.num_heads,1,1)
+            mask = mask.reshape(-1,mask.shape[2],mask.shape[3])
         #并行计算多头注意力
         attn_output,_ = self.single_head_attention(q,k,v,mask)  # [B*H, seq_len, head_dim]
         attn_output = attn_output.reshape(batch_size, self.num_heads, seq_len, self.head_dim).transpose(1, 2)
@@ -254,6 +267,7 @@ class Transformer(nn.Module):
         if (pretrained_wte is None) or (pretrained_wpe is None):
             self.word_embedding = nn.Embedding(vocab_size,embed_dim)
             self.position_encoding = PositionEncoding(embed_dim)
+            pirnt('加载预训练模型失败')
         else:
             self.word_embedding = pretrained_wte
             
