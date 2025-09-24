@@ -169,8 +169,9 @@ def train_epoch(model, tokenizer, dataloader, criterion, optimizer, scheduler, c
     model.train()  # 训练模式（启用 dropout 等）
     total_loss = 0.0
     # 遍历数据集
+    i = 0
     for batch in tqdm(dataloader, desc="Training"):
-
+        i = i + 1
         data = process_dataset(batch['translation'],tokenizer)
         src_ids = data['src_ids']
         tgt_input = data['tgt_input']
@@ -193,7 +194,10 @@ def train_epoch(model, tokenizer, dataloader, criterion, optimizer, scheduler, c
         loss.backward()  # 计算梯度
         nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)  # 梯度裁剪，防止梯度爆炸
         optimizer.step()  # 更新参数
-
+        if i % 100 == 0:
+            swanlab.log({
+                'step_loss': loss.item(),
+            },step = i//100)
 
         total_loss += loss.item()
     scheduler.step()  # 学习率调度
@@ -239,16 +243,17 @@ def main():
     # 加载分词器（负责文本→子词ID）
     tokenizer = BertTokenizer.from_pretrained("bert-base-multilingual-cased", cache_dir=config.pretrained_cache)
     tokenizer.eos_token = '[SEP]'
+    tokenizer.bos_token = '[CLS]'
     tokenizer.pad_token = tokenizer.pad_token
     config.pad_token_id = tokenizer.pad_token_id
     config.eos_token_id = tokenizer.eos_token_id
     # 加载预训练模型（我们只需要它的词嵌入层）
     #pretrained_model = GPT2Model.from_pretrained("gpt2",cache_dir=model_dir)    
     #加载翻译数据集
-    train_dataset = load_dataset("wmt19", "zh-en", split="train[:100000]",cache_dir=config.dataset_cache)
+    train_dataset = load_dataset("wmt19", "zh-en", split="train[:70000]",cache_dir=config.dataset_cache)
     train_dataloader = DataLoader(train_dataset,batch_size=config.batch_size,shuffle=True,num_workers=4)
-    test_dataset = load_dataset("wmt19", "zh-en", split="validation[:10000]",cache_dir=config.dataset_cache)
-    test_dataloader = DataLoader(test_dataset,batch_size=config.batch_size*4,shuffle=True,num_workers=4)
+    test_dataset = load_dataset("wmt19", "zh-en", split="validation[:8000]",cache_dir=config.dataset_cache)
+    test_dataloader = DataLoader(test_dataset,batch_size=config.batch_size,shuffle=True,num_workers=4)
 
     print("Sample training data:")
     for i in range(5):  # 打印前5条数据
@@ -276,7 +281,7 @@ def main():
         print(f"Epoch {epoch+1}/{config.epochs}, 平均损失：{avg_loss:.4f},validate损失:{validate_loss:.4f}")
         sample_text = '我爱自然语言处理'
         sample_output = generate_sample(model, tokenizer, sample_text)
-        print(sample_output)
+        print(f'sample_output{sample_output}')
         if best_validate_loss > validate_loss:
             torch.save(model.state_dict(), './val_models/best_model.pth')
             best_validate_loss = validate_loss
