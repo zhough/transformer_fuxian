@@ -23,7 +23,7 @@ class Config():
         self.dropout = 0.1
         self.epochs = 15
         self.batch_size = 16
-        self.learning_rate = 8e-5
+        self.learning_rate = 4e-4
         self.pad_token_id = 0
         self.eos_token_id = 102
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -165,7 +165,7 @@ def generate_sample(model, tokenizer, src_text, max_len=50):
 # --------------------------
 # 4. 训练循环batch
 # --------------------------
-def train_epoch(model, tokenizer, dataloader, criterion, optimizer, scheduler, config):
+def train_epoch(model, tokenizer, dataloader, criterion, optimizer, scheduler, config, epoch):
     model.train()  # 训练模式（启用 dropout 等）
     total_loss = 0.0
     # 遍历数据集
@@ -196,7 +196,7 @@ def train_epoch(model, tokenizer, dataloader, criterion, optimizer, scheduler, c
         optimizer.step()  # 更新参数
         if i % 100 == 0:
             swanlab.log({
-                'step_loss': loss.item(),
+                f'step_loss_{epoch}': loss.item(),
             },step = i//100)
 
         total_loss += loss.item()
@@ -273,7 +273,7 @@ def main():
     print(f"开始训练，设备：{config.device}")
     best_validate_loss = float('inf')
     for epoch in range(config.epochs):
-        res = train_epoch(model, tokenizer,train_dataloader, criterion, optimizer, scheduler, config)
+        res = train_epoch(model, tokenizer,train_dataloader, criterion, optimizer, scheduler, config, epoch)
         avg_loss = res['avg_loss']
         validate_res = validate(model,tokenizer,test_dataloader,criterion,config)
         validate_loss = validate_res['avg_loss']

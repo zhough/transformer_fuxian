@@ -7,7 +7,7 @@ import torch
 from utils import create_padding_mask, create_causal_mask
 config = Config()
 pretrained_cache = './temp/models'
-model_path = './output1/transformer.pth'
+model_path = './val_models/best_model.pth'
 
 
 def init_model(tokenizer, pretrained_model=None):
@@ -48,8 +48,8 @@ def generate(model,src_text,tokenizer,max_len=100):
         tgt_ids = torch.cat([tgt_ids, next_token_id], dim=-1)
 
         # 遇到结束符则停止
-        # if next_token_id.item() == tokenizer.eos_token_id:
-        #     break
+        if next_token_id.item() == tokenizer.eos_token_id:
+            break
     print(tgt_ids)
     return tokenizer.decode(tgt_ids[0], skip_special_tokens=True)
 
