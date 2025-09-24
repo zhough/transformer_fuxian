@@ -10,7 +10,7 @@ from utils import create_padding_mask, create_causal_mask, create_cross_attentio
 from transformers import GPT2Tokenizer, GPT2Model
 import swanlab
 from transformers import BertTokenizer
-
+from torch.amp import autocast, GradScaler
 swanlab.login(api_key="Nj75sPpgjdzUONcpKxlg6")
 class Config():
     def __init__(self):
@@ -21,9 +21,9 @@ class Config():
         self.hidden_dim = self.embed_dim *4
         self.max_seq_len = 512
         self.dropout = 0.1
-        self.epochs = 15
+        self.epochs = 16
         self.batch_size = 16
-        self.learning_rate = 4e-4
+        self.learning_rate = 1e-4
         self.pad_token_id = 0
         self.eos_token_id = 102
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -108,8 +108,8 @@ def init_model(tokenizer, pretrained_model=None):
         T_max=config.epochs,  # 周期为训练轮数
         eta_min=1e-6  # 最小学习率
     )
-
-    return model, criterion, optimizer, scheduler
+    scaler = GradScaler('cuda')
+    return model, criterion, optimizer, scheduler ,scaler
 
 def process_dataset(data,tokenizer):
     '''输入一条源数据和一条翻译数据的字典'''  
@@ -165,7 +165,7 @@ def generate_sample(model, tokenizer, src_text, max_len=50):
 # --------------------------
 # 4. 训练循环batch
 # --------------------------
-def train_epoch(model, tokenizer, dataloader, criterion, optimizer, scheduler, config, epoch):
+def train_epoch(model, tokenizer, dataloader, criterion, optimizer, scheduler, scaler, config, epoch):
     model.train()  # 训练模式（启用 dropout 等）
     total_loss = 0.0
     # 遍历数据集
@@ -176,24 +176,30 @@ def train_epoch(model, tokenizer, dataloader, criterion, optimizer, scheduler, c
         src_ids = data['src_ids']
         tgt_input = data['tgt_input']
         tgt_label = data['tgt_label']
-        # 前向传播：模型输出 logits
-        logits = model(
-            src_ids=src_ids,
-            tgt_ids=tgt_input,
-            pad_token_id=config.pad_token_id
-        )  # [batch_size, tgt_seq_len-1, vocab_size]
+        with autocast('cuda'):
+            # 前向传播：模型输出 logits
+            logits = model(
+                src_ids=src_ids,
+                tgt_ids=tgt_input,
+                pad_token_id=config.pad_token_id
+            )  # [batch_size, tgt_seq_len-1, vocab_size]
 
-        # 计算损失（需展平 logits 和标签）
-        loss = criterion(
-            logits.reshape(-1, logits.size(-1)),  # [batch_size*(tgt_seq_len-1), vocab_size]
-            tgt_label.reshape(-1)  # [batch_size*(tgt_seq_len-1)]
-        )
+            # 计算损失（需展平 logits 和标签）
+            loss = criterion(
+                logits.reshape(-1, logits.size(-1)),  # [batch_size*(tgt_seq_len-1), vocab_size]
+                tgt_label.reshape(-1)  # [batch_size*(tgt_seq_len-1)]
+            )
 
         # 反向传播 + 参数更新
         optimizer.zero_grad()  # 清空梯度
-        loss.backward()  # 计算梯度
-        nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)  # 梯度裁剪，防止梯度爆炸
-        optimizer.step()  # 更新参数
+        scaler.scale(loss).backward()  # 梯度缩放，防止梯度爆炸
+        # scaler.unscale_(optimizer)
+        # nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        scaler.step(optimizer)  # 参数更新
+        scaler.update()  # 梯度缩放更新
+
+        #loss.backward()  # 计算梯度
+        #optimizer.step()  # 更新参数
         if i % 100 == 0:
             swanlab.log({
                 f'step_loss_{epoch}': loss.item(),
@@ -234,7 +240,7 @@ def validate(model,tokenizer, dataloader, criterion, config):
 
 def main():
     swanlab.init(
-        project="transformer-training_v3",
+        project="transformer-training_v4",
         experiment_name="baseline-model",
         config=vars(config)  # 自动记录所有超参数
     )
@@ -252,7 +258,7 @@ def main():
     #加载翻译数据集
     train_dataset = load_dataset("wmt19", "zh-en", split="train[:70000]",cache_dir=config.dataset_cache)
     train_dataloader = DataLoader(train_dataset,batch_size=config.batch_size,shuffle=True,num_workers=4)
-    test_dataset = load_dataset("wmt19", "zh-en", split="validation[:8000]",cache_dir=config.dataset_cache)
+    test_dataset = load_dataset("wmt19", "zh-en", split="validation[:10000]",cache_dir=config.dataset_cache)
     test_dataloader = DataLoader(test_dataset,batch_size=config.batch_size,shuffle=True,num_workers=4)
 
     print("Sample training data:")
@@ -268,18 +274,18 @@ def main():
         print()
 
     # 初始化模型、损失函数、优化器
-    model, criterion, optimizer, scheduler = init_model(tokenizer)
+    model, criterion, optimizer, scheduler, scaler = init_model(tokenizer)
     # 开始训练
     print(f"开始训练，设备：{config.device}")
     best_validate_loss = float('inf')
     for epoch in range(config.epochs):
-        res = train_epoch(model, tokenizer,train_dataloader, criterion, optimizer, scheduler, config, epoch)
+        res = train_epoch(model, tokenizer,train_dataloader, criterion, optimizer, scheduler, scaler, config, epoch)
         avg_loss = res['avg_loss']
         validate_res = validate(model,tokenizer,test_dataloader,criterion,config)
         validate_loss = validate_res['avg_loss']
         
         print(f"Epoch {epoch+1}/{config.epochs}, 平均损失：{avg_loss:.4f},validate损失:{validate_loss:.4f}")
-        sample_text = '我爱自然语言处理'
+        sample_text = '一开始，很多人把这次危机比作1982年或1973年所发生的情况，这样得类比是令人宽心的，因为这两段时期意味着典型的周期性衰退。'
         sample_output = generate_sample(model, tokenizer, sample_text)
         print(f'sample_output{sample_output}')
         if best_validate_loss > validate_loss:

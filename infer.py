@@ -7,7 +7,7 @@ import torch
 from utils import create_padding_mask, create_causal_mask
 config = Config()
 pretrained_cache = './temp/models'
-model_path = './val_models/best_model.pth'
+model_path = './output1/transformer.pth'
 
 
 def init_model(tokenizer, pretrained_model=None):
@@ -69,13 +69,9 @@ if __name__ == "__main__":
     #pretrained_model = GPT2Model.from_pretrained("gpt2",cache_dir=pretrained_cache)
     model = init_model(tokenizer)
     model.load_state_dict(torch.load(model_path, map_location=config.device))
-    src_text = "我爱自然语言处理"
+    src_text = "一开始，很多人把这次危机比作1982年或1973年所发生的情况，这样得类比是令人宽心的，因为这两段时期意味着典型的周期性衰退。"
     result = generate(model,src_text,tokenizer)
-    print(tokenizer.tokenize(src_text))  
-    print(tokenizer.convert_tokens_to_ids(tokenizer.tokenize(src_text)))  
     print(f'output:{result}')
-    print(tokenizer.tokenize("I love natural language processing"))
-    print(tokenizer.convert_tokens_to_ids(tokenizer.tokenize("I love natural language processing")))
 
 
 # git config --global user.email "453854697@qq.com"

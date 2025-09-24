@@ -35,7 +35,7 @@ class SDPAttention(nn.Module):
         attn_socre = QK/math.sqrt(dk)
 
         if mask is not None:
-            attn_socre = attn_socre.masked_fill(mask==0,value=-1e9) #将mask = 0的部分填充value
+            attn_socre = attn_socre.masked_fill(mask==0,value=-1e4) #将mask = 0的部分填充value
         
         attn_weights = F.softmax(attn_socre,dim=-1) #[batch_size,seq_len_q,seq_len_k]
         output = torch.matmul(attn_weights,v)   #[batch_size, seq_len_q, head_dim]
@@ -268,10 +268,9 @@ class Transformer(nn.Module):
         if (pretrained_wte is None) or (pretrained_wpe is None):
             self.word_embedding = nn.Embedding(vocab_size,embed_dim)
             self.position_encoding = PositionEncoding(embed_dim)
-            print('加载预训练模型失败')
+            print('使用自定义词嵌入模块')
         else:
             self.word_embedding = pretrained_wte
-            
             self.position_encoding = pretrained_wpe
 
         self.encoders = TransformerEncoder(embed_dim=embed_dim,
