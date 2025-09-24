@@ -22,7 +22,7 @@ class Config():
         self.max_seq_len = 512
         self.dropout = 0.1
         self.epochs = 10
-        self.batch_size = 32
+        self.batch_size = 16
         self.learning_rate = 5e-5
         self.pad_token_id = None
         self.eos_token_id = None
@@ -224,21 +224,24 @@ def main():
     # 加载预训练模型（我们只需要它的词嵌入层）
     #pretrained_model = GPT2Model.from_pretrained("gpt2",cache_dir=model_dir)    
     #加载翻译数据集
-    train_dataset = load_dataset("wmt19", "zh-en", split="train[:30000]",cache_dir=config.dataset_cache)
+    train_dataset = load_dataset("wmt19", "zh-en", split="train[:40000]",cache_dir=config.dataset_cache)
     train_dataloader = DataLoader(train_dataset,batch_size=config.batch_size,shuffle=True,num_workers=4)
     test_dataset = load_dataset("wmt19", "zh-en", split="validation[:10000]",cache_dir=config.dataset_cache)
-    test_dataloader = DataLoader(test_dataset,batch_size=config.batch_size*8,shuffle=True,num_workers=4)
+    test_dataloader = DataLoader(test_dataset,batch_size=config.batch_size*4,shuffle=True,num_workers=4)
     # 初始化模型、损失函数、优化器
     model, criterion, optimizer, scheduler = init_model(tokenizer)
     # 开始训练
     print(f"开始训练，设备：{config.device}")
+    best_validate_loss = float('inf')
     for epoch in range(config.epochs):
         res = train_epoch(model, tokenizer,train_dataloader, criterion, optimizer, scheduler, config)
         avg_loss = res['avg_loss']
         validate_res = validate(model,tokenizer,test_dataloader,criterion,config)
         validate_loss = validate_res['avg_loss']
         print(f"Epoch {epoch+1}/{config.epochs}, 平均损失：{avg_loss:.4f},validate损失:{validate_loss:.4f}")
-
+        if best_validate_loss > validate_loss:
+            torch.save(model.state_dict(), './val_models/best_model.pth')
+            best_validate_loss = validate_loss
 
         swanlab.log({
             "train/epoch_avg_loss": avg_loss,  # 每轮平均损失
