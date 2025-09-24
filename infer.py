@@ -60,7 +60,7 @@ def generate(model,src_text,tokenizer,max_len=100):
 
 
 if __name__ == "__main__":
-    tokenizer = BertTokenizer.from_pretrained("bert-base-chinese", cache_dir=pretrained_cache)
+    tokenizer = BertTokenizer.from_pretrained("bert-base-multilingual-cased", cache_dir=pretrained_cache)
     if tokenizer.eos_token is None:
         tokenizer.eos_token = '[SEP]'
     if tokenizer.bos_token is None:
@@ -74,6 +74,8 @@ if __name__ == "__main__":
     print(tokenizer.tokenize(src_text))  
     print(tokenizer.convert_tokens_to_ids(tokenizer.tokenize(src_text)))  
     print(f'output:{result}')
+    print(tokenizer.tokenize("I love natural language processing"))
+    print(tokenizer.convert_tokens_to_ids(tokenizer.tokenize("I love natural language processing")))
 
 
 # git config --global user.email "453854697@qq.com"

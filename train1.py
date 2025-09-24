@@ -21,9 +21,9 @@ class Config():
         self.hidden_dim = self.embed_dim *4
         self.max_seq_len = 512
         self.dropout = 0.1
-        self.epochs = 10
+        self.epochs = 15
         self.batch_size = 16
-        self.learning_rate = 5e-5
+        self.learning_rate = 8e-5
         self.pad_token_id = 0
         self.eos_token_id = 102
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -141,6 +141,27 @@ def process_dataset(data,tokenizer):
         'tgt_input':tgt_input,
         'tgt_label':tgt_label,
     }
+
+def generate_sample(model, tokenizer, src_text, max_len=50):
+    model.eval()
+    with torch.no_grad():
+        src_encoding = tokenizer(
+            src_text,
+            padding=True,
+            truncation=True,
+            return_tensors='pt',
+        )
+        src_ids = src_encoding["input_ids"].to(config.device)
+        tgt_ids = torch.tensor([[tokenizer.bos_token_id]], device=config.device)
+        for _ in range(max_len):
+
+            logits = model(src_ids=src_ids, tgt_ids=tgt_ids)
+            next_token_id = torch.argmax(logits[:, -1, :], dim=-1, keepdim=True)
+            tgt_ids = torch.cat([tgt_ids, next_token_id], dim=-1)
+            if next_token_id.item() == tokenizer.eos_token_id:
+                break
+        return tokenizer.decode(tgt_ids[0], skip_special_tokens=True)
+
 # --------------------------
 # 4. 训练循环batch
 # --------------------------
@@ -209,14 +230,14 @@ def validate(model,tokenizer, dataloader, criterion, config):
 
 def main():
     swanlab.init(
-        project="transformer-training_v2",
+        project="transformer-training_v3",
         experiment_name="baseline-model",
         config=vars(config)  # 自动记录所有超参数
     )
 
     model_dir = './models/'
     # 加载分词器（负责文本→子词ID）
-    tokenizer = BertTokenizer.from_pretrained("bert-base-chinese", cache_dir=config.pretrained_cache)
+    tokenizer = BertTokenizer.from_pretrained("bert-base-multilingual-cased", cache_dir=config.pretrained_cache)
     tokenizer.eos_token = '[SEP]'
     tokenizer.pad_token = tokenizer.pad_token
     config.pad_token_id = tokenizer.pad_token_id
@@ -224,10 +245,23 @@ def main():
     # 加载预训练模型（我们只需要它的词嵌入层）
     #pretrained_model = GPT2Model.from_pretrained("gpt2",cache_dir=model_dir)    
     #加载翻译数据集
-    train_dataset = load_dataset("wmt19", "zh-en", split="train[:40000]",cache_dir=config.dataset_cache)
+    train_dataset = load_dataset("wmt19", "zh-en", split="train[:100000]",cache_dir=config.dataset_cache)
     train_dataloader = DataLoader(train_dataset,batch_size=config.batch_size,shuffle=True,num_workers=4)
     test_dataset = load_dataset("wmt19", "zh-en", split="validation[:10000]",cache_dir=config.dataset_cache)
     test_dataloader = DataLoader(test_dataset,batch_size=config.batch_size*4,shuffle=True,num_workers=4)
+
+    print("Sample training data:")
+    for i in range(5):  # 打印前5条数据
+        sample = train_dataset[i]['translation']
+        print(f"Sample {i+1}:")
+        print(f"ZH: {sample['zh']}")
+        print(f"EN: {sample['en']}")
+        print(f"ZH Tokens: {tokenizer.tokenize(sample['zh'])}")
+        print(f"ZH Token IDs: {tokenizer.convert_tokens_to_ids(tokenizer.tokenize(sample['zh']))}")
+        print(f"EN Tokens: {tokenizer.tokenize(sample['en'])}")
+        print(f"EN Token IDs: {tokenizer.convert_tokens_to_ids(tokenizer.tokenize(sample['en']))}")
+        print()
+
     # 初始化模型、损失函数、优化器
     model, criterion, optimizer, scheduler = init_model(tokenizer)
     # 开始训练
@@ -238,7 +272,11 @@ def main():
         avg_loss = res['avg_loss']
         validate_res = validate(model,tokenizer,test_dataloader,criterion,config)
         validate_loss = validate_res['avg_loss']
+        
         print(f"Epoch {epoch+1}/{config.epochs}, 平均损失：{avg_loss:.4f},validate损失:{validate_loss:.4f}")
+        sample_text = '我爱自然语言处理'
+        sample_output = generate_sample(model, tokenizer, sample_text)
+        print(sample_output)
         if best_validate_loss > validate_loss:
             torch.save(model.state_dict(), './val_models/best_model.pth')
             best_validate_loss = validate_loss
