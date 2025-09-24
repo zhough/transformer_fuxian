@@ -24,8 +24,8 @@ class Config():
         self.epochs = 10
         self.batch_size = 16
         self.learning_rate = 5e-5
-        self.pad_token_id = None
-        self.eos_token_id = None
+        self.pad_token_id = 0
+        self.eos_token_id = 102
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.model_save_path = './output1/transformer.pth'
         self.dataset_cache = './temp/dataset'
@@ -172,10 +172,10 @@ def train_epoch(model, tokenizer, dataloader, criterion, optimizer, scheduler, c
         loss.backward()  # 计算梯度
         nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)  # 梯度裁剪，防止梯度爆炸
         optimizer.step()  # 更新参数
-        scheduler.step()  # 学习率调度
+
 
         total_loss += loss.item()
-    # 计算平均损失
+    scheduler.step()  # 学习率调度
     avg_loss = total_loss / len(dataloader)
     return {
         'avg_loss' : avg_loss,

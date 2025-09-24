@@ -4,10 +4,10 @@ from transformers import GPT2Tokenizer, GPT2Model
 from transformers import BertTokenizer
 import torch.nn as nn
 import torch
-
+from utils import create_padding_mask, create_causal_mask
 config = Config()
 pretrained_cache = './temp/models'
-model_path = './temp/output1/transformer.pth'
+model_path = './output1/transformer.pth'
 
 
 def init_model(tokenizer, pretrained_model=None):
@@ -40,14 +40,17 @@ def generate(model,src_text,tokenizer,max_len=100):
     tgt_ids = torch.tensor([[tokenizer.bos_token_id]]).to(config.device)
     for _ in range(max_len):
         # 模型预测下一个token
+        src_mask = create_padding_mask(src_ids, tokenizer.pad_token_id).to(config.device)
+        tgt_mask = create_padding_mask(tgt_ids, tokenizer.pad_token_id).to(config.device)
+        tgt_causal_mask = create_causal_mask(tgt_ids.shape[1], device=config.device)
         logits = model(src_ids=src_ids, tgt_ids=tgt_ids)
         next_token_id = torch.argmax(logits[:, -1, :], dim=-1, keepdim=True)
         tgt_ids = torch.cat([tgt_ids, next_token_id], dim=-1)
 
         # 遇到结束符则停止
-        if next_token_id.item() == tokenizer.eos_token_id:
-            break
-        #print(tgt_ids)
+        # if next_token_id.item() == tokenizer.eos_token_id:
+        #     break
+    print(tgt_ids)
     return tokenizer.decode(tgt_ids[0], skip_special_tokens=True)
 
 
@@ -65,7 +68,7 @@ if __name__ == "__main__":
 
     #pretrained_model = GPT2Model.from_pretrained("gpt2",cache_dir=pretrained_cache)
     model = init_model(tokenizer)
-    #model.load_state_dict(torch.load(model_path, map_location=config.device))
+    model.load_state_dict(torch.load(model_path, map_location=config.device))
     src_text = "我爱自然语言处理"
     result = generate(model,src_text,tokenizer)
     print(tokenizer.tokenize(src_text))  
