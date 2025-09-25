@@ -3,7 +3,7 @@ from transformers import BertTokenizer
 from torch.utils.data import Dataset, DataLoader
 from train1 import process_dataset,Config
 config = Config()
-dataset = load_dataset("wmt19", "zh-en", split="train[:4]",cache_dir=config.dataset_cache)
+dataset = load_dataset("wmt19", "zh-en", split="train[:8]",cache_dir=config.dataset_cache)
 dataloader = DataLoader(dataset,batch_size=4,shuffle=False,num_workers=1)
 tokenizer = BertTokenizer.from_pretrained("bert-base-multilingual-cased",cache_dir=config.pretrained_cache) 
 for data in dataloader:
