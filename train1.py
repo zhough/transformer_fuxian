@@ -7,9 +7,8 @@ from tqdm import tqdm  # 用于显示进度条
 import os
 from model import Transformer
 from utils import create_padding_mask, create_causal_mask, create_cross_attention_mask
-from transformers import GPT2Tokenizer, GPT2Model
 import swanlab
-from transformers import BertTokenizer
+from transformers import BertTokenizer,BertModel
 from torch.amp import autocast, GradScaler
 swanlab.login(api_key="Nj75sPpgjdzUONcpKxlg6")
 class Config():
@@ -24,6 +23,7 @@ class Config():
         self.epochs = 16
         self.batch_size = 16
         self.learning_rate = 1e-4
+        self.weight_decay = 1e-4
         self.pad_token_id = 0
         self.eos_token_id = 102
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -85,8 +85,7 @@ def init_model(tokenizer, pretrained_model=None):
         num_encoder_layers=config.num_encoder_layers,
         num_decoder_layers=config.num_decoder_layers,
         vocab_size=tokenizer.vocab_size,
-        pretrained_wte=None,  # 预训练词嵌入
-        pretrained_wpe=None,  # 预训练位置编码
+        pretrained_model=pretrained_model,  # 预训练词嵌入
         ffn_hidden_dim=config.hidden_dim,
         dropout=config.dropout
     )
@@ -100,7 +99,7 @@ def init_model(tokenizer, pretrained_model=None):
     optimizer = optim.AdamW(
         model.parameters(),
         lr=config.learning_rate,
-        weight_decay=0.01  # 权重衰减，防止过拟合
+        weight_decay=config.weight_decay  # 权重衰减，防止过拟合
     )
     # 学习率调度器：随训练步数衰减学习率
     scheduler = optim.lr_scheduler.CosineAnnealingLR(
@@ -245,18 +244,17 @@ def main():
         config=vars(config)  # 自动记录所有超参数
     )
 
-    model_dir = './models/'
     # 加载分词器（负责文本→子词ID）
     tokenizer = BertTokenizer.from_pretrained("bert-base-multilingual-cased", cache_dir=config.pretrained_cache)
+    # 加载预训练模型
+    pretrained_model = BertModel.from_pretrained("bert-base-multilingual-cased",cache_dir=config.pretrained_cache)  
     tokenizer.eos_token = '[SEP]'
     tokenizer.bos_token = '[CLS]'
     tokenizer.pad_token = tokenizer.pad_token
     config.pad_token_id = tokenizer.pad_token_id
-    config.eos_token_id = tokenizer.eos_token_id
-    # 加载预训练模型（我们只需要它的词嵌入层）
-    #pretrained_model = GPT2Model.from_pretrained("gpt2",cache_dir=model_dir)    
+    config.eos_token_id = tokenizer.eos_token_id  
     #加载翻译数据集
-    train_dataset = load_dataset("wmt19", "zh-en", split="train[:400000]",cache_dir=config.dataset_cache)
+    train_dataset = load_dataset("wmt19", "zh-en", split="train[:100000]",cache_dir=config.dataset_cache)
     train_dataloader = DataLoader(train_dataset,batch_size=config.batch_size,shuffle=True,num_workers=4)
     test_dataset = load_dataset("wmt19", "zh-en", split="validation[:40000]",cache_dir=config.dataset_cache)
     test_dataloader = DataLoader(test_dataset,batch_size=config.batch_size,shuffle=True,num_workers=4)
@@ -274,7 +272,7 @@ def main():
         print()
 
     # 初始化模型、损失函数、优化器
-    model, criterion, optimizer, scheduler, scaler = init_model(tokenizer)
+    model, criterion, optimizer, scheduler, scaler = init_model(tokenizer,pretrained_model)
     # 开始训练
     print(f"开始训练，设备：{config.device}")
     best_validate_loss = float('inf')

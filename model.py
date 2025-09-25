@@ -1,4 +1,3 @@
-from transformers import GPT2Tokenizer, GPT2Model
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -260,18 +259,17 @@ class Transformer(nn.Module):
                  num_encoder_layers, 
                  num_decoder_layers, 
                  vocab_size,
-                 pretrained_wte=None,
-                 pretrained_wpe=None,
+                 pretrained_model=None,
                  ffn_hidden_dim=None, 
                  dropout=0.1):
         super().__init__()
-        if (pretrained_wte is None) or (pretrained_wpe is None):
+        if pretrained_model is None:
             self.word_embedding = nn.Embedding(vocab_size,embed_dim)
             self.position_encoding = PositionEncoding(embed_dim)
             print('使用自定义词嵌入模块')
         else:
-            self.word_embedding = pretrained_wte
-            self.position_encoding = pretrained_wpe
+            self.pretrained_embedding = pretrained_model.embeddings
+            print('使用预训练词嵌入模块')
 
         self.encoders = TransformerEncoder(embed_dim=embed_dim,
                                            num_heads=num_heads,
@@ -299,24 +297,30 @@ class Transformer(nn.Module):
         cross_attn_mask = None
 
         if src_ids is not None:
-            src_word_ebd = self.word_embedding(src_ids)
-            batch_size, src_seq_len = src_ids.shape
-            src_pos = torch.arange(0, src_seq_len, device=src_ids.device)  # [src_seq_len]
-            src_pos = src_pos.unsqueeze(0).repeat(batch_size, 1)  # [B, src_seq_len]（Int 类型）
-            src_pos_ebd = self.position_encoding(src_pos)
-            src_ebd = src_word_ebd + src_pos_ebd
+            if self.pretrained_embedding is None:
+                src_word_ebd = self.word_embedding(src_ids)
+                batch_size, src_seq_len = src_ids.shape
+                src_pos = torch.arange(0, src_seq_len, device=src_ids.device)  # [src_seq_len]
+                src_pos = src_pos.unsqueeze(0).repeat(batch_size, 1)  # [B, src_seq_len]（Int 类型）
+                src_pos_ebd = self.position_encoding(src_pos)
+                src_ebd = src_word_ebd + src_pos_ebd
+            else :
+                src_ebd = self.pretrained_embedding(src_ids)
             #编码器层
             src_mask = create_padding_mask(src_ids,pad_token_id) if src_pad_mask is None else src_pad_mask
             src_mask = src_mask.repeat(1, 1, src_ids.shape[1], 1)
             encoder_output = self.encoders(src_ebd,src_mask)
         if tgt_ids is not None:
-            #解码器层
-            tgt_word_emb = self.word_embedding(tgt_ids)  # [B, tgt_seq_len, embed_dim]
-            batch_size, tgt_seq_len = tgt_ids.shape
-            tgt_pos = torch.arange(0, tgt_seq_len, device=tgt_ids.device)  # [tgt_seq_len]
-            tgt_pos = tgt_pos.unsqueeze(0).repeat(batch_size, 1)  # [B, tgt_seq_len]
-            tgt_pos_emb = self.position_encoding(tgt_pos)  # [B, tgt_seq_len, embed_dim]
-            tgt_emb =  tgt_word_emb + tgt_pos_emb
+            if self.pretrained_embedding is None:
+                tgt_word_emb = self.word_embedding(tgt_ids)  # [B, tgt_seq_len, embed_dim]
+                batch_size, tgt_seq_len = tgt_ids.shape
+                tgt_pos = torch.arange(0, tgt_seq_len, device=tgt_ids.device)  # [tgt_seq_len]
+                tgt_pos = tgt_pos.unsqueeze(0).repeat(batch_size, 1)  # [B, tgt_seq_len]
+                tgt_pos_emb = self.position_encoding(tgt_pos)  # [B, tgt_seq_len, embed_dim]
+                tgt_emb =  tgt_word_emb + tgt_pos_emb
+            else:
+                tgt_emb = self.pretrained_embedding(tgt_ids)
+                
             tgt_pad_mask = create_padding_mask(tgt_ids,pad_token_id) if tgt_pad_mask is None else tgt_pad_mask
             tgt_pad_mask = tgt_pad_mask.repeat(1,1,tgt_ids.shape[1],1)# [B, 1, tgt_len, tgt_len]
             tgt_causal_mask = create_causal_mask(tgt_ids.shape[1],device=tgt_ids.device)
