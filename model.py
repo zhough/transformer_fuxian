@@ -347,7 +347,7 @@ class Transformer(nn.Module):
                 tgt_emb = self.pretrained_embedding(tgt_ids)
             if tgt_pad_mask is None:
                 tgt_mask = create_padding_mask(tgt_ids,pad_token_id)
-                tgt_mask = tgt_pad_mask.repeat(1,1,tgt_ids.shape[1],1)# [B, 1, tgt_len, tgt_len]
+                tgt_mask = tgt_mask.repeat(1,1,tgt_ids.shape[1],1)# [B, 1, tgt_len, tgt_len]
             else:
                 tgt_mask = tgt_pad_mask.unsqueeze(1).unsqueeze(2)
             tgt_causal_mask = create_causal_mask(tgt_ids.shape[1],device=tgt_ids.device)
