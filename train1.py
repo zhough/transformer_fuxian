@@ -20,9 +20,9 @@ class Config():
         self.hidden_dim = self.embed_dim *4
         self.max_seq_len = 512
         self.dropout = 0  #需要模型过拟合
-        self.epochs = 50
-        self.batch_size = 16
-        self.learning_rate = 8e-4
+        self.epochs = 20
+        self.batch_size = 32
+        self.learning_rate = 4e-4
         self.weight_decay = 1e-4
         self.pad_token_id = 0
         self.eos_token_id = 102
@@ -30,7 +30,7 @@ class Config():
         self.model_save_path = './output1/transformer.pth'
         self.dataset_cache = './temp/dataset'
         self.pretrained_cache = './temp/models'
-        self.swanlab_project_name = 'transformer-training_v5'
+        self.swanlab_project_name = 'transformer-training_v6'
         self.best_model_path = './val_models/best_model.pth'
         self.step = 0
 
@@ -218,9 +218,9 @@ def main():
     config.pad_token_id = tokenizer.pad_token_id
     config.eos_token_id = tokenizer.eos_token_id  
     #加载翻译数据集
-    train_dataset = load_dataset("wmt19", "zh-en", split="train[:2000]",cache_dir=config.dataset_cache)
+    train_dataset = load_dataset("wmt19", "zh-en", split="train[:60000]",cache_dir=config.dataset_cache)
     train_dataloader = DataLoader(train_dataset,batch_size=config.batch_size,shuffle=True,num_workers=4)
-    test_dataset = load_dataset("wmt19", "zh-en", split="validation[:1000]",cache_dir=config.dataset_cache)
+    test_dataset = load_dataset("wmt19", "zh-en", split="validation[:10000]",cache_dir=config.dataset_cache)
     test_dataloader = DataLoader(test_dataset,batch_size=config.batch_size,shuffle=True,num_workers=4)
 
     print("Sample training data:")
@@ -249,7 +249,8 @@ def main():
         print(f"Epoch {epoch+1}/{config.epochs}, 平均损失：{avg_loss:.4f},validate损失:{validate_loss:.4f}")
         sample_text = '一开始，很多人把这次危机比作1982年或1973年所发生的情况，这样得类比是令人宽心的，因为这两段时期意味着典型的周期性衰退。'
         sample_output = generate_sample(model, tokenizer, sample_text)
-        print(f'sample_output{sample_output}')
+        print(f'sample_output:{sample_output}')
+        print('标准答案:At the start of the crisis, many people likened it to 1982 or 1973, which was reassuring, because both dates refer to classical cyclical downturns.')
         if best_validate_loss > validate_loss:
             torch.save(model.state_dict(), config.best_model_path)
             print(f'成功保存当前轮次模型参数到{config.best_model_path}')

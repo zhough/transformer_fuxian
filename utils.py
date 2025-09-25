@@ -15,6 +15,11 @@ def create_cross_attention_mask(tgt_ids, src_ids, pad_token_id):
     src_pad = (src_ids != pad_token_id).unsqueeze(1).unsqueeze(2)  # [B, 1, 1, src_len]
     return tgt_pad & src_pad  # [B, 1, tgt_len, src_len]
 
+def create_cross_attention_mask1(tgt_mask,src_mask):
+    tgt_mask = tgt_mask.unsqueeze(1).unsqueeze(3)
+    src_mask = src_mask.unsqueeze(1).unsqueeze(2)
+    return tgt_mask & src_mask
+
 # class MyDataset(Dataset):
 #     def __init__(self,src_data,tgt_data,tokenizer,max_seq_len=512):
 #         self.src_data = src_data

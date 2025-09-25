@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 from utils import create_padding_mask,create_causal_mask,create_cross_attention_mask
-
+from torch.utils.checkpoint import checkpoint
 
 class PositionEncoding(nn.Module):
     def __init__(self,embed_dim) -> None:
@@ -100,8 +100,11 @@ class MultiHeadAttention(nn.Module):
             mask = mask.reshape(-1,mask.shape[2],mask.shape[3])
         #并行计算多头注意力
         attn_output,_ = self.single_head_attention(q,k,v,mask)  # [B*H, seq_len, head_dim]
-        attn_output = attn_output.reshape(batch_size, self.num_heads, seq_len, self.head_dim).transpose(1, 2)
-        attn_output = attn_output.reshape(batch_size,seq_len,self.embed_dim)
+        if encoder_kv is not None:
+            attn_output = attn_output.reshape(batch_size,self.num_heads,tgt_seq_len,self.head_dim).transpose(1, 2)
+        else:
+            attn_output = attn_output.reshape(batch_size, self.num_heads, seq_len, self.head_dim).transpose(1, 2)
+        attn_output = attn_output.reshape(batch_size,-1,self.embed_dim)
 
         attn_output = self.output_proj(attn_output)
         
@@ -147,16 +150,29 @@ class Encoder(nn.Module):   #先层归一化再接attn和ffn
         self.dropout2 = nn.Dropout(self.dropout)
 
     def forward(self,x,mask=None):
+        def attn_forward(x):
+            return self.attn(x,mask=mask)
         residual = x
         x = self.norm1(x)
-        x = self.attn(x,mask=mask)
+        # 仅在训练时启用检查点
+        if self.training:
+            x = checkpoint(attn_forward, x)  # 重新计算时需传入输入x
+        else:
+            x = attn_forward(x)
+        #x = self.attn(x,mask=mask)
         x = self.dropout1(x)
         x = x + residual
 
         #ffn
+        def ffn_forward(x):
+            return self.ffn(x)
         residual = x
         x = self.norm2(x)
-        x = self.ffn(x)
+        if self.training:
+            x = checkpoint(ffn_forward, x)
+        else:
+            x = ffn_forward(x)
+        #x = self.ffn(x)
         x = self.dropout2(x)
         x = x + residual    
 
@@ -183,16 +199,16 @@ class Decoder(nn.Module):
         self.norm3 = nn.LayerNorm(self.embed_dim)
 
     def forward(self, x, self_attn_mask=None, cross_attn_mask=None, encoder_output=None):
-        '''
-        causal_mask : 因果掩码，屏蔽未来位置
-        self_attn_mask : 目标序列的padding掩码
-        cross_attn_mask : 目标序列和源序列的padding掩码
-        '''
+        def self_attn_forward(x):
+            return self.attn(x,mask=self_attn_mask)
         #自注意力
         residual = x
-        #combined_mask = causal_mask if self_attn_mask is None else causal_mask & self_attn_mask
         x = self.norm1(x)
-        x = self.attn(x,self_attn_mask)
+        if self.training:
+            x = checkpoint(self_attn_forward, x)  # 重新计算时需传入输入x
+        else:
+            x = self_attn_forward(x)
+        #x = self.attn(x,self_attn_mask)
         x = self.dropout1(x)
         x = x + residual
 
@@ -205,9 +221,15 @@ class Decoder(nn.Module):
             x = x + residual
 
         #ffn
+        def ffn_forward(x):
+            return self.ffn(x)
         residual = x
         x = self.norm3(x)
-        x = self.ffn(x)
+        if self.training:
+            x = checkpoint(ffn_forward, x)
+        else:
+            x = ffn_forward(x)
+        #x = self.ffn(x)
         x = self.dropout3(x)
         x = x + residual   
         
@@ -307,8 +329,11 @@ class Transformer(nn.Module):
             else :
                 src_ebd = self.pretrained_embedding(src_ids)
             #编码器层
-            src_mask = create_padding_mask(src_ids,pad_token_id) if src_pad_mask is None else src_pad_mask
-            src_mask = src_mask.repeat(1, 1, src_ids.shape[1], 1)
+            if src_pad_mask is None:
+                src_mask = create_padding_mask(src_ids,pad_token_id)
+                src_mask = src_mask.repeat(1, 1, src_ids.shape[1], 1)
+            else:
+                src_mask = src_pad_mask.unsqueeze(1).unsqueeze(2)
             encoder_output = self.encoders(src_ebd,src_mask)
         if tgt_ids is not None:
             if self.pretrained_embedding is None:
@@ -320,11 +345,13 @@ class Transformer(nn.Module):
                 tgt_emb =  tgt_word_emb + tgt_pos_emb
             else:
                 tgt_emb = self.pretrained_embedding(tgt_ids)
-                
-            tgt_pad_mask = create_padding_mask(tgt_ids,pad_token_id) if tgt_pad_mask is None else tgt_pad_mask
-            tgt_pad_mask = tgt_pad_mask.repeat(1,1,tgt_ids.shape[1],1)# [B, 1, tgt_len, tgt_len]
+            if tgt_pad_mask is None:
+                tgt_mask = create_padding_mask(tgt_ids,pad_token_id)
+                tgt_mask = tgt_pad_mask.repeat(1,1,tgt_ids.shape[1],1)# [B, 1, tgt_len, tgt_len]
+            else:
+                tgt_mask = tgt_pad_mask.unsqueeze(1).unsqueeze(2)
             tgt_causal_mask = create_causal_mask(tgt_ids.shape[1],device=tgt_ids.device)
-            combined_mask = torch.logical_and(tgt_pad_mask,tgt_causal_mask)
+            combined_mask = torch.logical_and(tgt_mask,tgt_causal_mask)
 
             #交叉注意力掩码
             cross_attn_mask = create_cross_attention_mask(tgt_ids, src_ids, pad_token_id)
