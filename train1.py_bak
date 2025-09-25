@@ -10,20 +10,6 @@ from utils import create_padding_mask, create_causal_mask, create_cross_attentio
 import swanlab
 from transformers import BertTokenizer,BertModel
 from torch.amp import autocast, GradScaler
-from torch.utils.data.distributed import DistributedSampler
-import torch.distributed as dist
-import torch.multiprocessing as mp
-
-# 初始化分布式环境
-def setup(rank, world_size):
-    os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = '12355'
-    dist.init_process_group("nccl", rank=rank, world_size=world_size)
-    torch.cuda.set_device(rank)
-
-# 清理分布式环境
-def cleanup():
-    dist.destroy_process_group()
 
 class Config():
     def __init__(self):
@@ -35,7 +21,7 @@ class Config():
         self.max_seq_len = 512
         self.dropout = 0  #需要模型过拟合
         self.epochs = 20
-        self.batch_size = 32
+        self.batch_size = 16
 
         self.learning_rate = 4e-4
         self.weight_decay = 1e-4
@@ -48,16 +34,12 @@ class Config():
         self.swanlab_project_name = 'transformer-training_v6'
         self.best_model_path = './val_models/best_model.pth'
         self.step = 0
-        # 新增分布式训练参数
-        self.world_size = torch.cuda.device_count()
-        self.dist_url = "env://"
-        self.local_rank = -1
 
 config = Config()
 
 
 
-def init_model(tokenizer, pretrained_model=None,rank=0):
+def init_model(tokenizer, pretrained_model=None):
     # 初始化 Transformer 模型（复用 GPT2 的词嵌入和位置编码）
     model = Transformer(
         embed_dim=config.embed_dim,
@@ -69,14 +51,11 @@ def init_model(tokenizer, pretrained_model=None,rank=0):
         ffn_hidden_dim=config.hidden_dim,
         dropout=config.dropout
     )
-    model.to(rank)
-    # 使用DDP包装模型
-    if config.world_size > 1:
-        model = torch.nn.parallel.DistributedDataParallel(
-            model, device_ids=[rank], find_unused_parameters=False
-        )
+    if torch.cuda.device_count() > 1:
+        model = nn.DataParallel(model)  # 自动分发到所有可用GPU
+    model.to(config.device)
     # 损失函数：忽略 padding 位置的损失
-    criterion = nn.CrossEntropyLoss(ignore_index=config.pad_token_id).to(rank)
+    criterion = nn.CrossEntropyLoss(ignore_index=config.pad_token_id)
 
     # 优化器：使用 AdamW（带权重衰减的 Adam）
     optimizer = optim.AdamW(
@@ -93,7 +72,7 @@ def init_model(tokenizer, pretrained_model=None,rank=0):
     scaler = GradScaler('cuda')
     return model, criterion, optimizer, scheduler ,scaler
 
-def process_dataset(data,tokenizer,rank):
+def process_dataset(data,tokenizer):
     '''输入一条源数据和一条翻译数据的字典'''  
     src_texts = data['zh']
     tgt_texts = data['en']
@@ -113,11 +92,11 @@ def process_dataset(data,tokenizer,rank):
         return_tensors="pt",
         add_special_tokens=True
     )
-    src_ids = src_tokenized.input_ids.to(rank)
-    src_mask = src_tokenized.attention_mask.to(rank)
-    tgt_input = tgt_tokenized.input_ids[:, :-1].to(rank)  # 移除最后一个token
-    tgt_label = tgt_tokenized.input_ids[:, 1:].to(rank)   # 移除第一个token
-    tgt_mask = tgt_tokenized.attention_mask[:, :-1].to(rank)
+    src_ids = src_tokenized.input_ids.to(config.device)
+    src_mask = src_tokenized.attention_mask.to(config.device)
+    tgt_input = tgt_tokenized.input_ids[:, :-1].to(config.device)  # 移除最后一个token
+    tgt_label = tgt_tokenized.input_ids[:, 1:].to(config.device)   # 移除第一个token
+    tgt_mask = tgt_tokenized.attention_mask[:, :-1].to(config.device)
     return {
         'src_ids':src_ids,
         'src_mask':src_mask,
@@ -126,10 +105,7 @@ def process_dataset(data,tokenizer,rank):
         'tgt_mask':tgt_mask,
     }
 
-def generate_sample(model, tokenizer, src_text, max_len=50,rank=0):
-    if rank != 0:
-        return ''
-    
+def generate_sample(model, tokenizer, src_text, max_len=50):
     model.eval()
     with torch.no_grad():
         src_encoding = tokenizer(
@@ -139,8 +115,8 @@ def generate_sample(model, tokenizer, src_text, max_len=50,rank=0):
             return_tensors='pt',
             max_length=config.max_seq_len,
         )
-        src_ids = src_encoding["input_ids"].to(rank)
-        tgt_ids = torch.tensor([[tokenizer.bos_token_id]], device=rank)
+        src_ids = src_encoding["input_ids"].to(config.device)
+        tgt_ids = torch.tensor([[tokenizer.bos_token_id]], device=config.device)
         for _ in range(max_len):
 
             logits = model(src_ids=src_ids, tgt_ids=tgt_ids)
@@ -153,14 +129,13 @@ def generate_sample(model, tokenizer, src_text, max_len=50,rank=0):
 # --------------------------
 # 4. 训练循环batch
 # --------------------------
-def train_epoch(model, tokenizer, dataloader, criterion, optimizer, scheduler, scaler, config,rank):
+def train_epoch(model, tokenizer, dataloader, criterion, optimizer, scheduler, scaler, config, epoch):
     model.train()  # 训练模式（启用 dropout 等）
     total_loss = 0.0
     # 遍历数据集
-    for batch in tqdm(dataloader, desc="Training", disable=(rank != 0)):
-        if rank == 0:
-            config.step = config.step + 1
-        data = process_dataset(batch['translation'],tokenizer,rank)
+    for batch in tqdm(dataloader, desc="Training"):
+        config.step = config.step + 1
+        data = process_dataset(batch['translation'],tokenizer)
         src_ids = data['src_ids']
         tgt_input = data['tgt_input']
         tgt_label = data['tgt_label']
@@ -188,7 +163,7 @@ def train_epoch(model, tokenizer, dataloader, criterion, optimizer, scheduler, s
 
         #loss.backward()  # 计算梯度
         #optimizer.step()  # 更新参数
-        if config.step % 100 == 0 and rank == 0:
+        if config.step % 100 == 0:
             swanlab.log({
                 f'step_loss': loss.item(),
             },step = config.step)
@@ -200,12 +175,12 @@ def train_epoch(model, tokenizer, dataloader, criterion, optimizer, scheduler, s
         'avg_loss' : avg_loss,
     }
 
-def validate(model,tokenizer, dataloader, criterion, config, rank):
+def validate(model,tokenizer, dataloader, criterion, config):
     model.eval()
     total_loss = 0
     with torch.no_grad():
-        for batch in tqdm(dataloader,desc="Validating", disable=(rank != 0)):
-            data = process_dataset(batch['translation'],tokenizer,rank)
+        for batch in tqdm(dataloader,desc="Validating"):
+            data = process_dataset(batch['translation'],tokenizer)
             src_ids = data['src_ids']
             tgt_input = data['tgt_input']
             tgt_label = data['tgt_label']
@@ -220,25 +195,19 @@ def validate(model,tokenizer, dataloader, criterion, config, rank):
             )
             
             total_loss += loss.item()
-        total_loss_tensor = torch.tensor(total_loss, device=rank)
-        # 所有进程的 total_loss_tensor 求和（dist.all_reduce 会把结果存回每个进程的张量）
-        dist.all_reduce(total_loss_tensor, op=dist.ReduceOp.SUM)
-        global_total_loss = total_loss_tensor.item()
-        global_avg_loss = global_total_loss / (len(dataloader) * config.world_size)
+        avg_loss = total_loss / len(dataloader)
         return {
-            'avg_loss' : global_avg_loss,
+            'avg_loss' : avg_loss,
         } 
 
 
-def main(rank,world_size,config):
-    setup(rank, world_size)
-    if rank == 0:
-        swanlab.login(api_key="Nj75sPpgjdzUONcpKxlg6")
-        swanlab.init(
-            project=config.swanlab_project_name,
-            experiment_name="baseline-model",
-            config=vars(config)  # 自动记录所有超参数
-        )
+def main():
+    swanlab.login(api_key="Nj75sPpgjdzUONcpKxlg6")
+    swanlab.init(
+        project=config.swanlab_project_name,
+        experiment_name="baseline-model",
+        config=vars(config)  # 自动记录所有超参数
+    )
 
     # 加载分词器（负责文本→子词ID）
     tokenizer = BertTokenizer.from_pretrained("bert-base-multilingual-cased", cache_dir=config.pretrained_cache)
@@ -251,67 +220,52 @@ def main(rank,world_size,config):
     config.eos_token_id = tokenizer.eos_token_id  
     #加载翻译数据集
     train_dataset = load_dataset("wmt19", "zh-en", split="train[:60000]",cache_dir=config.dataset_cache)
+    train_dataloader = DataLoader(train_dataset,batch_size=config.batch_size,shuffle=True,num_workers=4)
     test_dataset = load_dataset("wmt19", "zh-en", split="validation[:10000]",cache_dir=config.dataset_cache)
-    # 使用DistributedSampler进行数据分片
-    train_sampler = DistributedSampler(train_dataset, shuffle=True)
-    test_sampler = DistributedSampler(test_dataset, shuffle=False)
-    
-    train_dataloader = DataLoader(train_dataset,batch_size=config.batch_size,
-                                  shuffle=True,num_workers=4,sampler=train_sampler,pin_memory=True)
-    test_dataloader = DataLoader(test_dataset,batch_size=config.batch_size,
-                                 shuffle=True,num_workers=4,sampler=test_sampler,pin=True)
-    
-    if rank == 0:
-        print("Sample training data:")
-        for i in range(5):  # 打印前5条数据
-            sample = train_dataset[i]['translation']
-            print(f"Sample {i+1}:")
-            print(f"ZH: {sample['zh']}")
-            print(f"EN: {sample['en']}")
-            print(f"ZH Tokens: {tokenizer.tokenize(sample['zh'])}")
-            print(f"ZH Token IDs: {tokenizer.convert_tokens_to_ids(tokenizer.tokenize(sample['zh']))}")
-            print(f"EN Tokens: {tokenizer.tokenize(sample['en'])}")
-            print(f"EN Token IDs: {tokenizer.convert_tokens_to_ids(tokenizer.tokenize(sample['en']))}")
-            print()
+    test_dataloader = DataLoader(test_dataset,batch_size=config.batch_size,shuffle=True,num_workers=4)
+
+    print("Sample training data:")
+    for i in range(5):  # 打印前5条数据
+        sample = train_dataset[i]['translation']
+        print(f"Sample {i+1}:")
+        print(f"ZH: {sample['zh']}")
+        print(f"EN: {sample['en']}")
+        print(f"ZH Tokens: {tokenizer.tokenize(sample['zh'])}")
+        print(f"ZH Token IDs: {tokenizer.convert_tokens_to_ids(tokenizer.tokenize(sample['zh']))}")
+        print(f"EN Tokens: {tokenizer.tokenize(sample['en'])}")
+        print(f"EN Token IDs: {tokenizer.convert_tokens_to_ids(tokenizer.tokenize(sample['en']))}")
+        print()
 
     # 初始化模型、损失函数、优化器
-    model, criterion, optimizer, scheduler, scaler = init_model(tokenizer,pretrained_model,rank)
+    model, criterion, optimizer, scheduler, scaler = init_model(tokenizer,pretrained_model)
     # 开始训练
     print(f"开始训练，设备：{config.device}")
     best_validate_loss = float('inf')
     for epoch in range(config.epochs):
-        train_sampler.set_epoch(epoch)
-        res = train_epoch(model, tokenizer,train_dataloader, criterion, optimizer, scheduler, scaler, config,rank)
-        validate_res = validate(model,tokenizer,test_dataloader,criterion,config,rank)
-        if rank == 0:
-            avg_loss = res['avg_loss']
-            validate_loss = validate_res['avg_loss']
-            
-            print(f"Epoch {epoch+1}/{config.epochs}, 平均损失：{avg_loss:.4f},validate损失:{validate_loss:.4f}")
-            sample_text = '一开始，很多人把这次危机比作1982年或1973年所发生的情况，这样得类比是令人宽心的，因为这两段时期意味着典型的周期性衰退。'
-            sample_output = generate_sample(model, tokenizer, sample_text)
-            print(f'sample_output:{sample_output}')
-            print('标准答案:At the start of the crisis, many people likened it to 1982 or 1973, which was reassuring, because both dates refer to classical cyclical downturns.')
-            if best_validate_loss > validate_loss:
-                torch.save(model.state_dict(), config.best_model_path)
-                print(f'成功保存当前轮次模型参数到{config.best_model_path}')
-                best_validate_loss = validate_loss
+        res = train_epoch(model, tokenizer,train_dataloader, criterion, optimizer, scheduler, scaler, config, epoch)
+        avg_loss = res['avg_loss']
+        validate_res = validate(model,tokenizer,test_dataloader,criterion,config)
+        validate_loss = validate_res['avg_loss']
+        
+        print(f"Epoch {epoch+1}/{config.epochs}, 平均损失：{avg_loss:.4f},validate损失:{validate_loss:.4f}")
+        sample_text = '一开始，很多人把这次危机比作1982年或1973年所发生的情况，这样得类比是令人宽心的，因为这两段时期意味着典型的周期性衰退。'
+        sample_output = generate_sample(model, tokenizer, sample_text)
+        print(f'sample_output:{sample_output}')
+        print('标准答案:At the start of the crisis, many people likened it to 1982 or 1973, which was reassuring, because both dates refer to classical cyclical downturns.')
+        if best_validate_loss > validate_loss:
+            torch.save(model.state_dict(), config.best_model_path)
+            print(f'成功保存当前轮次模型参数到{config.best_model_path}')
+            best_validate_loss = validate_loss
 
-            swanlab.log({
-                "train/epoch_avg_loss": avg_loss,  # 每轮平均损失
-                'train/validate_loss':validate_loss,
-            }, step=epoch + 1)  # 以 epoch 为步长
-    if rank == 0:
-        # 保存模型
-        os.makedirs(os.path.dirname(config.model_save_path), exist_ok=True)
-        torch.save(model.state_dict(), config.model_save_path)
-        print(f"模型已保存至：{config.model_save_path}")
-    cleanup()
+        swanlab.log({
+            "train/epoch_avg_loss": avg_loss,  # 每轮平均损失
+            'train/validate_loss':validate_loss,
+        }, step=epoch + 1)  # 以 epoch 为步长
+
+    # 保存模型
+    os.makedirs(os.path.dirname(config.model_save_path), exist_ok=True)
+    torch.save(model.state_dict(), config.model_save_path)
+    print(f"模型已保存至：{config.model_save_path}")
 
 if __name__ == "__main__":
-    mp.spawn(
-        main,
-        args=(config.world_size, config),
-        nprocs=config.world_size,
-        join=True
-    )
+    main()
