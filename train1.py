@@ -73,8 +73,8 @@ def init_model(tokenizer, pretrained_model=None):
 
 def process_dataset(data,tokenizer):
     '''输入一条源数据和一条翻译数据的字典'''  
-    src_texts = data['zh']
-    tgt_texts = data['en']
+    src_texts = [data['zh']]
+    tgt_texts = [data['en']]
     src_tokenized = tokenizer(
         src_texts,
         padding=True,
