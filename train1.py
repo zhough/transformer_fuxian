@@ -19,10 +19,10 @@ class Config():
         self.num_decoder_layers = 6
         self.hidden_dim = self.embed_dim *4
         self.max_seq_len = 512
-        self.dropout = 0.1
-        self.epochs = 16
+        self.dropout = 0  #需要模型过拟合
+        self.epochs = 50
         self.batch_size = 16
-        self.learning_rate = 1e-4
+        self.learning_rate = 8e-4
         self.weight_decay = 1e-4
         self.pad_token_id = 0
         self.eos_token_id = 102
@@ -254,9 +254,9 @@ def main():
     config.pad_token_id = tokenizer.pad_token_id
     config.eos_token_id = tokenizer.eos_token_id  
     #加载翻译数据集
-    train_dataset = load_dataset("wmt19", "zh-en", split="train[:100000]",cache_dir=config.dataset_cache)
+    train_dataset = load_dataset("wmt19", "zh-en", split="train[:2000]",cache_dir=config.dataset_cache)
     train_dataloader = DataLoader(train_dataset,batch_size=config.batch_size,shuffle=True,num_workers=4)
-    test_dataset = load_dataset("wmt19", "zh-en", split="validation[:40000]",cache_dir=config.dataset_cache)
+    test_dataset = load_dataset("wmt19", "zh-en", split="validation[:1000]",cache_dir=config.dataset_cache)
     test_dataloader = DataLoader(test_dataset,batch_size=config.batch_size,shuffle=True,num_workers=4)
 
     print("Sample training data:")
