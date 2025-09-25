@@ -109,9 +109,10 @@ def generate_sample(model, tokenizer, src_text, max_len=50):
     with torch.no_grad():
         src_encoding = tokenizer(
             src_text,
-            padding=True,
+            padding="max_length",
             truncation=True,
             return_tensors='pt',
+            max_length=config.max_seq_len,
         )
         src_ids = src_encoding["input_ids"].to(config.device)
         tgt_ids = torch.tensor([[tokenizer.bos_token_id]], device=config.device)
