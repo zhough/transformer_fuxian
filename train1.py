@@ -259,7 +259,7 @@ def main(rank,world_size,config):
     train_dataloader = DataLoader(train_dataset,batch_size=config.batch_size,
                                   num_workers=4,sampler=train_sampler,pin_memory=True)
     test_dataloader = DataLoader(test_dataset,batch_size=config.batch_size,
-                                 num_workers=4,sampler=test_sampler,pin=True)
+                                 num_workers=4,sampler=test_sampler,pin_memory=True)
     
     if rank == 0:
         print("Sample training data:")
