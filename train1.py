@@ -10,7 +10,7 @@ from utils import create_padding_mask, create_causal_mask, create_cross_attentio
 import swanlab
 from transformers import BertTokenizer,BertModel
 from torch.amp import autocast, GradScaler
-swanlab.login(api_key="Nj75sPpgjdzUONcpKxlg6")
+
 class Config():
     def __init__(self):
         self.embed_dim = 768
@@ -30,52 +30,13 @@ class Config():
         self.model_save_path = './output1/transformer.pth'
         self.dataset_cache = './temp/dataset'
         self.pretrained_cache = './temp/models'
+        self.swanlab_project_name = 'transformer-training_v5'
+        self.best_model_path = './val_models/best_model.pth'
+        self.step = 0
 
 config = Config()
 
-# class MyDataset(Dataset):
-#     def __init__(self,src_data,tgt_data,tokenizer,max_seq_len=512):
-#         self.src_data = src_data
-#         self.tgt_data = tgt_data
-#         self.tokenizer = tokenizer
-#         self.max_seq_len = max_seq_len
-#         self.tokenizer.pad_token = self.tokenizer.eos_token
-#         self.pad_token_id = self.tokenizer.pad_token_id
-    
-#     def __len__(self):
-#         return len(self.src_data)
 
-#     def __getitem__(self, idx):
-#         src_text = self.src_data[idx]
-#         tgt_text = self.tgt_data[idx]
-
-#         # 对源序列编码（添加结束符，截断/填充到最大长度）
-#         src_encoding = self.tokenizer(
-#             src_text,
-#             truncation=True,
-#             max_length=self.max_seq_len,
-#             padding="max_length",
-#             return_tensors="pt"
-#         )
-#         src_ids = src_encoding["input_ids"].squeeze(0)  # [max_seq_len]
-
-#         tgt_encoding = self.tokenizer(
-#             tgt_text,
-#             truncation=True,
-#             max_length=self.max_seq_len,
-#             padding='max_length',
-#             return_tensors='pt'
-#         )
-#         tgt_ids = tgt_encoding['input_ids'].squeeze(0)
-
-#         tgt_input = tgt_ids[:-1]
-#         tgt_labels = tgt_ids[1:]
-
-#         return {
-#             'src_ids':src_ids,
-#             'tgt_input':tgt_input,
-#             'tgt_label':tgt_labels
-#         }
 
 def init_model(tokenizer, pretrained_model=None):
     # 初始化 Transformer 模型（复用 GPT2 的词嵌入和位置编码）
@@ -131,14 +92,16 @@ def process_dataset(data,tokenizer):
         add_special_tokens=True
     )
     src_ids = src_tokenized.input_ids.to(config.device)
-    #src_mask = src_tokenized.attention_mask.to(config.device)
+    src_mask = src_tokenized.attention_mask.to(config.device)
     tgt_input = tgt_tokenized.input_ids[:, :-1].to(config.device)  # 移除最后一个token
     tgt_label = tgt_tokenized.input_ids[:, 1:].to(config.device)   # 移除第一个token
-    #tgt_mask = tgt_tokenized.attention_mask[:, :-1].to(config.device)
+    tgt_mask = tgt_tokenized.attention_mask[:, :-1].to(config.device)
     return {
         'src_ids':src_ids,
+        'src_mask':src_mask,
         'tgt_input':tgt_input,
         'tgt_label':tgt_label,
+        'tgt_mask':tgt_mask,
     }
 
 def generate_sample(model, tokenizer, src_text, max_len=50):
@@ -168,9 +131,8 @@ def train_epoch(model, tokenizer, dataloader, criterion, optimizer, scheduler, s
     model.train()  # 训练模式（启用 dropout 等）
     total_loss = 0.0
     # 遍历数据集
-    i = 0
     for batch in tqdm(dataloader, desc="Training"):
-        i = i + 1
+        config.step = config.step + 1
         data = process_dataset(batch['translation'],tokenizer)
         src_ids = data['src_ids']
         tgt_input = data['tgt_input']
@@ -199,10 +161,10 @@ def train_epoch(model, tokenizer, dataloader, criterion, optimizer, scheduler, s
 
         #loss.backward()  # 计算梯度
         #optimizer.step()  # 更新参数
-        if i % 100 == 0:
+        if config.step % 100 == 0:
             swanlab.log({
-                f'step_loss_{epoch}': loss.item(),
-            },step = i//100)
+                f'step_loss': loss.item(),
+            },step = config.step)
 
         total_loss += loss.item()
     scheduler.step()  # 学习率调度
@@ -238,8 +200,9 @@ def validate(model,tokenizer, dataloader, criterion, config):
 
 
 def main():
+    swanlab.login(api_key="Nj75sPpgjdzUONcpKxlg6")
     swanlab.init(
-        project="transformer-training_v5",
+        project=config.swanlab_project_name,
         experiment_name="baseline-model",
         config=vars(config)  # 自动记录所有超参数
     )
@@ -287,12 +250,13 @@ def main():
         sample_output = generate_sample(model, tokenizer, sample_text)
         print(f'sample_output{sample_output}')
         if best_validate_loss > validate_loss:
-            torch.save(model.state_dict(), './val_models/best_model.pth')
+            torch.save(model.state_dict(), config.best_model_path)
+            print(f'成功保存当前轮次模型参数到{config.best_model_path}')
             best_validate_loss = validate_loss
 
         swanlab.log({
             "train/epoch_avg_loss": avg_loss,  # 每轮平均损失
-            'validate_loss':validate_loss,
+            'train/validate_loss':validate_loss,
         }, step=epoch + 1)  # 以 epoch 为步长
 
     # 保存模型
