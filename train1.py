@@ -28,9 +28,9 @@ def cleanup():
 class Config():
     def __init__(self):
         self.embed_dim = 768
-        self.num_heads = 8
-        self.num_encoder_layers = 6
-        self.num_decoder_layers = 6
+        self.num_heads = 6
+        self.num_encoder_layers = 4
+        self.num_decoder_layers = 4
         self.hidden_dim = self.embed_dim *4
         self.max_seq_len = 512
         self.dropout = 0  #需要模型过拟合
@@ -250,16 +250,16 @@ def main(rank,world_size,config):
     config.pad_token_id = tokenizer.pad_token_id
     config.eos_token_id = tokenizer.eos_token_id  
     #加载翻译数据集
-    train_dataset = load_dataset("wmt19", "zh-en", split="train[:60000]",cache_dir=config.dataset_cache)
+    train_dataset = load_dataset("wmt19", "zh-en", split="train[:10000]",cache_dir=config.dataset_cache)
     test_dataset = load_dataset("wmt19", "zh-en", split="validation[:10000]",cache_dir=config.dataset_cache)
     # 使用DistributedSampler进行数据分片
     train_sampler = DistributedSampler(train_dataset, shuffle=True)
     test_sampler = DistributedSampler(test_dataset, shuffle=False)
     
     train_dataloader = DataLoader(train_dataset,batch_size=config.batch_size,
-                                  num_workers=4,sampler=train_sampler,pin_memory=True)
+                                  num_workers=4,sampler=train_sampler,pin_memory=True,drop_last=True)
     test_dataloader = DataLoader(test_dataset,batch_size=config.batch_size,
-                                 num_workers=4,sampler=test_sampler,pin_memory=True)
+                                 num_workers=4,sampler=test_sampler,pin_memory=True,drop_last=True)
     
     if rank == 0:
         print("Sample training data:")
