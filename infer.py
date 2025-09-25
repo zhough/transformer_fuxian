@@ -72,6 +72,7 @@ if __name__ == "__main__":
     src_text = "一开始，很多人把这次危机比作1982年或1973年所发生的情况，这样得类比是令人宽心的，因为这两段时期意味着典型的周期性衰退。"
     result = generate(model,src_text,tokenizer)
     print(f'output:{result}')
+    print(f'正确答案：At the start of the crisis, many people likened it to 1982 or 1973, which was reassuring, because both dates refer to classical cyclical downturns.')
 
 
 # git config --global user.email "453854697@qq.com"

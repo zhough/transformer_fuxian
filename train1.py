@@ -256,9 +256,9 @@ def main():
     # 加载预训练模型（我们只需要它的词嵌入层）
     #pretrained_model = GPT2Model.from_pretrained("gpt2",cache_dir=model_dir)    
     #加载翻译数据集
-    train_dataset = load_dataset("wmt19", "zh-en", split="train[:70000]",cache_dir=config.dataset_cache)
+    train_dataset = load_dataset("wmt19", "zh-en", split="train[:400000]",cache_dir=config.dataset_cache)
     train_dataloader = DataLoader(train_dataset,batch_size=config.batch_size,shuffle=True,num_workers=4)
-    test_dataset = load_dataset("wmt19", "zh-en", split="validation[:10000]",cache_dir=config.dataset_cache)
+    test_dataset = load_dataset("wmt19", "zh-en", split="validation[:40000]",cache_dir=config.dataset_cache)
     test_dataloader = DataLoader(test_dataset,batch_size=config.batch_size,shuffle=True,num_workers=4)
 
     print("Sample training data:")
