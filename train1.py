@@ -99,7 +99,8 @@ def process_dataset(data,tokenizer,rank):
     tgt_texts = data['en']
     src_tokenized = tokenizer(
         src_texts,
-        padding="max_length",
+        #padding="max_length",
+        padding=True,
         truncation=True,
         max_length=config.max_seq_len,
         return_tensors='pt',
@@ -107,7 +108,8 @@ def process_dataset(data,tokenizer,rank):
     )
     tgt_tokenized = tokenizer(
         tgt_texts,
-        padding="max_length",
+        #padding="max_length",
+        padding=True,
         truncation=True,
         max_length=config.max_seq_len,
         return_tensors="pt",
