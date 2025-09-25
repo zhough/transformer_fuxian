@@ -28,14 +28,14 @@ def cleanup():
 class Config():
     def __init__(self):
         self.embed_dim = 768
-        self.num_heads = 6
+        self.num_heads = 8
         self.num_encoder_layers = 4
         self.num_decoder_layers = 4
         self.hidden_dim = self.embed_dim *4
         self.max_seq_len = 512
         self.dropout = 0  #需要模型过拟合
         self.epochs = 20
-        self.batch_size = 32
+        self.batch_size = 16
 
         self.learning_rate = 4e-4
         self.weight_decay = 1e-4
