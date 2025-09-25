@@ -77,7 +77,7 @@ def process_dataset(data,tokenizer):
     tgt_texts = [data['en']]
     src_tokenized = tokenizer(
         src_texts,
-        padding=True,
+        padding="max_length",
         truncation=True,
         max_length=config.max_seq_len,
         return_tensors='pt',
@@ -85,7 +85,7 @@ def process_dataset(data,tokenizer):
     )
     tgt_tokenized = tokenizer(
         tgt_texts,
-        padding=True,
+        padding="max_length",
         truncation=True,
         max_length=config.max_seq_len,
         return_tensors="pt",
