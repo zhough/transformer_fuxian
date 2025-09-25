@@ -240,7 +240,7 @@ def validate(model,tokenizer, dataloader, criterion, config):
 
 def main():
     swanlab.init(
-        project="transformer-training_v4",
+        project="transformer-training_v5",
         experiment_name="baseline-model",
         config=vars(config)  # 自动记录所有超参数
     )
