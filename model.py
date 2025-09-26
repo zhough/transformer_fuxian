@@ -5,7 +5,9 @@ import math
 from utils import create_padding_mask,create_causal_mask,create_cross_attention_mask
 from torch.utils.checkpoint import checkpoint
 
+#梯度检查点是否开启
 CHECKPOINT = False
+
 class PositionEncoding(nn.Module):
     def __init__(self,embed_dim) -> None:
         super().__init__()

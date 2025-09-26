@@ -34,10 +34,10 @@ class Config():
         self.hidden_dim = self.embed_dim *4
         self.max_seq_len = 512
         self.dropout = 0.1  
-        self.epochs = 20
+        self.epochs = 8
         self.batch_size = 16
 
-        self.learning_rate = 3e-5
+        self.learning_rate = 2e-5
         self.weight_decay = 1e-4
         self.pad_token_id = 0
         self.eos_token_id = 102
@@ -47,7 +47,8 @@ class Config():
         self.pretrained_cache = './temp/models'
         self.swanlab_project_name = 'transformer-training_v6'
         self.best_model_path = './val_models/best_model.pth'
-        self.temp_model = '/kaggle/input/transformer_v1/transformers/default/1/best_model.pth'
+        self.temp_model = './temp_model/best_model.pth'
+        self.latest_model = 'val_models/latest_model.pth'
         self.step = 0
         # 新增分布式训练参数
         self.world_size = torch.cuda.device_count()
@@ -272,8 +273,8 @@ def main(rank,world_size,config):
     config.pad_token_id = tokenizer.pad_token_id
     config.eos_token_id = tokenizer.eos_token_id  
     #加载翻译数据集
-    train_dataset = load_dataset("wmt19", "zh-en", split="train[60000:120000]",cache_dir=config.dataset_cache)
-    test_dataset = load_dataset("wmt19", "zh-en", split="validation[:10000]",cache_dir=config.dataset_cache)
+    train_dataset = load_dataset("wmt19", "zh-en", split="train[120000:240000]",cache_dir=config.dataset_cache)
+    test_dataset = load_dataset("wmt19", "zh-en", split="validation[10000:20000]",cache_dir=config.dataset_cache)
     # 使用DistributedSampler进行数据分片
     train_sampler = DistributedSampler(train_dataset, shuffle=True)
     test_sampler = DistributedSampler(test_dataset, shuffle=False)
@@ -314,6 +315,8 @@ def main(rank,world_size,config):
             sample_output = generate_sample(model, tokenizer, sample_text)
             print(f'sample_output:{sample_output}')
             print('标准答案:At the start of the crisis, many people likened it to 1982 or 1973, which was reassuring, because both dates refer to classical cyclical downturns.')
+            torch.save(model.state_dict(),config.latest_model)
+            print(f'成功保存当前最新轮次模型参数到{config.latest_model}')
             if best_validate_loss > validate_loss:
                 torch.save(model.state_dict(), config.best_model_path)
                 print(f'成功保存当前轮次模型参数到{config.best_model_path}')
