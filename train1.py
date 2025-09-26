@@ -34,10 +34,10 @@ class Config():
         self.hidden_dim = self.embed_dim *4
         self.max_seq_len = 512
         self.dropout = 0.1  
-        self.epochs = 8
+        self.epochs = 5
         self.batch_size = 16
 
-        self.learning_rate = 2e-5
+        self.learning_rate = 1e-5
         self.weight_decay = 1e-4
         self.pad_token_id = 0
         self.eos_token_id = 102
@@ -48,7 +48,7 @@ class Config():
         self.swanlab_project_name = 'transformer-training_v6'
         self.best_model_path = './val_models/best_model.pth'
         self.temp_model = './temp_model/best_model.pth'
-        self.latest_model = 'val_models/latest_model.pth'
+        self.latest_model = './val_models/latest_model.pth'
         self.step = 0
         # 新增分布式训练参数
         self.world_size = torch.cuda.device_count()
