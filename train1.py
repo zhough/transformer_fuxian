@@ -71,9 +71,25 @@ def init_model(tokenizer, pretrained_model=None,rank=0):
         dropout=config.dropout
     )
     model.to(rank)
-    if config.temp_model is not None:
-        model.load_state_dict(torch.load(config.temp_model, map_location = torch.device('cuda',rank)))
-        print(f'加载模型到设备GPU{rank}继续训练')
+    # 2. 加载权重（关键：处理 module. 前缀）
+    if hasattr(config, 'temp_model') and os.path.exists(config.temp_model):
+        # 2.1 加载权重文件（指定 map_location 到当前 GPU）
+        device = torch.device('cuda', rank)
+        state_dict = torch.load(config.temp_model, map_location=device)
+        
+        # 2.2 移除所有权重键的 module. 前缀（核心修复步骤）
+        new_state_dict = {}
+        for key, value in state_dict.items():
+            # 去掉键开头的 module.（若存在）
+            if key.startswith('module.'):
+                new_key = key[len('module.'):]  # 从第 7 个字符开始截取（module. 共 7 个字符）
+            else:
+                new_key = key  # 若没有前缀，直接保留原键
+            new_state_dict[new_key] = value
+        
+        # 2.3 加载处理后的权重到模型
+        model.load_state_dict(new_state_dict)
+        print(f"成功加载模型权重（已移除 module. 前缀）到 GPU {rank}")
     # 使用DDP包装模型
     if config.world_size > 1:
         model = torch.nn.parallel.DistributedDataParallel(
