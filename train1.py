@@ -73,12 +73,12 @@ def init_model(tokenizer, pretrained_model=None,rank=0):
     )
     model.to(rank)
     # 2. 加载权重（关键：处理 module. 前缀）
-    if hasattr(config, 'temp_model') and os.path.exists(config.temp_model):
+    if config.temp_model is not None:
         # 2.1 加载权重文件（指定 map_location 到当前 GPU）
         device = torch.device('cuda', rank)
         state_dict = torch.load(config.temp_model, map_location=device)
         
-        # 2.2 移除所有权重键的 module. 前缀（核心修复步骤）
+        # 2.2 移除所有权重键的 module. 前缀
         new_state_dict = {}
         for key, value in state_dict.items():
             # 去掉键开头的 module.（若存在）
