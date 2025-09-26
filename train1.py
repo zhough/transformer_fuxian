@@ -273,7 +273,7 @@ def main(rank,world_size,config):
     config.pad_token_id = tokenizer.pad_token_id
     config.eos_token_id = tokenizer.eos_token_id  
     #加载翻译数据集
-    train_dataset = load_dataset("wmt19", "zh-en", split="train[:120000]",cache_dir=config.dataset_cache)
+    train_dataset = load_dataset("wmt19", "zh-en", split="train[:140000]",cache_dir=config.dataset_cache)
     test_dataset = load_dataset("wmt19", "zh-en", split="validation[:12000]",cache_dir=config.dataset_cache)
     # 使用DistributedSampler进行数据分片
     train_sampler = DistributedSampler(train_dataset, shuffle=True)
@@ -326,11 +326,11 @@ def main(rank,world_size,config):
                 "train/epoch_avg_loss": avg_loss,  # 每轮平均损失
                 'train/validate_loss':validate_loss,
             }, step=epoch + 1)  # 以 epoch 为步长
-    if rank == 0:
+    #if rank == 0:
         # 保存模型
-        os.makedirs(os.path.dirname(config.model_save_path), exist_ok=True)
+        #os.makedirs(os.path.dirname(config.model_save_path), exist_ok=True)
         #torch.save(model.state_dict(), config.model_save_path)
-        print(f"模型已保存至：{config.model_save_path}")
+        #print(f"模型已保存至：{config.model_save_path}")
     cleanup()
 
 if __name__ == "__main__":
