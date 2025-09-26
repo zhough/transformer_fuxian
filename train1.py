@@ -36,7 +36,6 @@ class Config():
         self.dropout = 0.1  #需要模型过拟合
         self.epochs = 20
         self.batch_size = 16
-        self.batch_size = 16
 
         self.learning_rate = 4e-4
         self.weight_decay = 1e-4
