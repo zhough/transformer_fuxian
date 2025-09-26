@@ -29,8 +29,8 @@ class Config():
     def __init__(self):
         self.embed_dim = 768
         self.num_heads = 8
-        self.num_encoder_layers = 4
-        self.num_decoder_layers = 4
+        self.num_encoder_layers = 6
+        self.num_decoder_layers = 6
         self.hidden_dim = self.embed_dim *4
         self.max_seq_len = 512
         self.dropout = 0.1  #需要模型过拟合
