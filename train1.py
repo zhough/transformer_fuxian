@@ -34,7 +34,7 @@ class Config():
         self.hidden_dim = self.embed_dim *4
         self.max_seq_len = 512
         self.dropout = 0.1  
-        self.epochs = 5
+        self.epochs = 6
         self.batch_size = 16
 
         self.learning_rate = 1e-5
@@ -273,7 +273,7 @@ def main(rank,world_size,config):
     config.pad_token_id = tokenizer.pad_token_id
     config.eos_token_id = tokenizer.eos_token_id  
     #加载翻译数据集
-    train_dataset = load_dataset("wmt19", "zh-en", split="train[120000:240000]",cache_dir=config.dataset_cache)
+    train_dataset = load_dataset("wmt19", "zh-en", split="train[:120000]",cache_dir=config.dataset_cache)
     test_dataset = load_dataset("wmt19", "zh-en", split="validation[:12000]",cache_dir=config.dataset_cache)
     # 使用DistributedSampler进行数据分片
     train_sampler = DistributedSampler(train_dataset, shuffle=True)
@@ -329,7 +329,7 @@ def main(rank,world_size,config):
     if rank == 0:
         # 保存模型
         os.makedirs(os.path.dirname(config.model_save_path), exist_ok=True)
-        torch.save(model.state_dict(), config.model_save_path)
+        #torch.save(model.state_dict(), config.model_save_path)
         print(f"模型已保存至：{config.model_save_path}")
     cleanup()
 
