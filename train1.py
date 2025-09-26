@@ -29,12 +29,13 @@ class Config():
     def __init__(self):
         self.embed_dim = 768
         self.num_heads = 8
-        self.num_encoder_layers = 6
-        self.num_decoder_layers = 6
+        self.num_encoder_layers = 4
+        self.num_decoder_layers = 4
         self.hidden_dim = self.embed_dim *4
         self.max_seq_len = 512
         self.dropout = 0.1  #需要模型过拟合
         self.epochs = 20
+        self.batch_size = 16
         self.batch_size = 16
 
         self.learning_rate = 4e-4
@@ -103,7 +104,8 @@ def process_dataset(data,tokenizer,rank):
     tgt_texts = data['en']
     src_tokenized = tokenizer(
         src_texts,
-        padding="max_length",
+        #padding="max_length",
+        padding=True,
         truncation=True,
         max_length=config.max_seq_len,
         return_tensors='pt',
@@ -111,7 +113,8 @@ def process_dataset(data,tokenizer,rank):
     )
     tgt_tokenized = tokenizer(
         tgt_texts,
-        padding="max_length",
+        #padding="max_length",
+        padding=True,
         truncation=True,
         max_length=config.max_seq_len,
         return_tensors="pt",
@@ -261,7 +264,7 @@ def main(rank,world_size,config):
     test_sampler = DistributedSampler(test_dataset, shuffle=False)
     
     train_dataloader = DataLoader(train_dataset,batch_size=config.batch_size,
-                                  num_workers=4,sampler=train_sampler,pin_memory=True)
+                                  num_workers=4,sampler=train_sampler,pin_memory=True,drop_last=True)
     test_dataloader = DataLoader(test_dataset,batch_size=config.batch_size,
                                  num_workers=4,sampler=test_sampler,pin_memory=True)
     
