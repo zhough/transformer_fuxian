@@ -5,6 +5,7 @@ import math
 from utils import create_padding_mask,create_causal_mask,create_cross_attention_mask
 from torch.utils.checkpoint import checkpoint
 
+CHECKPOINT = False
 class PositionEncoding(nn.Module):
     def __init__(self,embed_dim) -> None:
         super().__init__()
@@ -155,7 +156,7 @@ class Encoder(nn.Module):   #先层归一化再接attn和ffn
         residual = x
         x = self.norm1(x)
         # 仅在训练时启用检查点
-        if self.training:
+        if self.training and CHECKPOINT:
             x = checkpoint(attn_forward, x)  # 重新计算时需传入输入x
         else:
             x = attn_forward(x)
@@ -168,7 +169,7 @@ class Encoder(nn.Module):   #先层归一化再接attn和ffn
             return self.ffn(x)
         residual = x
         x = self.norm2(x)
-        if self.training:
+        if self.training and CHECKPOINT:
             x = checkpoint(ffn_forward, x)
         else:
             x = ffn_forward(x)
@@ -204,7 +205,7 @@ class Decoder(nn.Module):
         #自注意力
         residual = x
         x = self.norm1(x)
-        if self.training:
+        if self.training and CHECKPOINT:
             x = checkpoint(self_attn_forward, x)  # 重新计算时需传入输入x
         else:
             x = self_attn_forward(x)
@@ -225,7 +226,7 @@ class Decoder(nn.Module):
             return self.ffn(x)
         residual = x
         x = self.norm3(x)
-        if self.training:
+        if self.training and CHECKPOINT:
             x = checkpoint(ffn_forward, x)
         else:
             x = ffn_forward(x)

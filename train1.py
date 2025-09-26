@@ -33,9 +33,9 @@ class Config():
         self.num_decoder_layers = 6
         self.hidden_dim = self.embed_dim *4
         self.max_seq_len = 512
-        self.dropout = 0  #需要模型过拟合
+        self.dropout = 0.1  #需要模型过拟合
         self.epochs = 20
-        self.batch_size = 32
+        self.batch_size = 16
 
         self.learning_rate = 4e-4
         self.weight_decay = 1e-4
@@ -47,6 +47,7 @@ class Config():
         self.pretrained_cache = './temp/models'
         self.swanlab_project_name = 'transformer-training_v6'
         self.best_model_path = './val_models/best_model.pth'
+        self.temp_model = '/kaggle/input/transformer_v1/transformers/default/1/best_model.pth'
         self.step = 0
         # 新增分布式训练参数
         self.world_size = torch.cuda.device_count()
@@ -70,6 +71,9 @@ def init_model(tokenizer, pretrained_model=None,rank=0):
         dropout=config.dropout
     )
     model.to(rank)
+    if config.temp_model is not None:
+        model.load_state_dict(torch.load(config.temp_model, map_location=rank))
+        print('加载模型继续训练')
     # 使用DDP包装模型
     if config.world_size > 1:
         model = torch.nn.parallel.DistributedDataParallel(
@@ -250,7 +254,7 @@ def main(rank,world_size,config):
     config.pad_token_id = tokenizer.pad_token_id
     config.eos_token_id = tokenizer.eos_token_id  
     #加载翻译数据集
-    train_dataset = load_dataset("wmt19", "zh-en", split="train[:60000]",cache_dir=config.dataset_cache)
+    train_dataset = load_dataset("wmt19", "zh-en", split="train[60000:120000]",cache_dir=config.dataset_cache)
     test_dataset = load_dataset("wmt19", "zh-en", split="validation[:10000]",cache_dir=config.dataset_cache)
     # 使用DistributedSampler进行数据分片
     train_sampler = DistributedSampler(train_dataset, shuffle=True)
@@ -259,7 +263,7 @@ def main(rank,world_size,config):
     train_dataloader = DataLoader(train_dataset,batch_size=config.batch_size,
                                   num_workers=4,sampler=train_sampler,pin_memory=True)
     test_dataloader = DataLoader(test_dataset,batch_size=config.batch_size,
-                                 num_workers=4,sampler=test_sampler,pin=True)
+                                 num_workers=4,sampler=test_sampler,pin_memory=True)
     
     if rank == 0:
         print("Sample training data:")
