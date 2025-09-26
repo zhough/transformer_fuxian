@@ -72,8 +72,8 @@ def init_model(tokenizer, pretrained_model=None,rank=0):
     )
     model.to(rank)
     if config.temp_model is not None:
-        model.load_state_dict(torch.load(config.temp_model, map_location=rank))
-        print('加载模型继续训练')
+        model.load_state_dict(torch.load(config.temp_model, map_location = torch.device('cuda',rank)))
+        print(f'加载模型到设备{torch.device('cuda',rank)}继续训练')
     # 使用DDP包装模型
     if config.world_size > 1:
         model = torch.nn.parallel.DistributedDataParallel(
