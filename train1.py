@@ -274,7 +274,7 @@ def main(rank,world_size,config):
     config.eos_token_id = tokenizer.eos_token_id  
     #加载翻译数据集
     train_dataset = load_dataset("wmt19", "zh-en", split="train[120000:240000]",cache_dir=config.dataset_cache)
-    test_dataset = load_dataset("wmt19", "zh-en", split="validation[10000:20000]",cache_dir=config.dataset_cache)
+    test_dataset = load_dataset("wmt19", "zh-en", split="validation[:12000]",cache_dir=config.dataset_cache)
     # 使用DistributedSampler进行数据分片
     train_sampler = DistributedSampler(train_dataset, shuffle=True)
     test_sampler = DistributedSampler(test_dataset, shuffle=False)
